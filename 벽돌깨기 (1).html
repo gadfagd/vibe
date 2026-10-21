@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>벽돌깨기</title>
+<style>
+:root{--bg:#f4f5fb;--card:#fff;--text:#1d2040;--sub:#6b6f90;--accent:#5b5bf0;--accent-text:#fff;--border:#dcdff0;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12131f;--card:#1c1e32;--text:#eceefc;--sub:#9a9dc4;--accent:#7c7cff;--accent-text:#12131f;--border:#2c2f4d}}
+:root[data-theme="dark"]{--bg:#12131f;--card:#1c1e32;--text:#eceefc;--sub:#9a9dc4;--accent:#7c7cff;--accent-text:#12131f;--border:#2c2f4d}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;display:flex;justify-content:center;min-height:100vh}
+main{width:100%;max-width:480px;padding:16px}
+h1{font-size:22px;margin:0 0 12px;text-align:center}
+.hud{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px}
+.hud div{flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 6px;text-align:center}
+.hud small{display:block;color:var(--sub);font-size:12px}
+.hud b{font-size:20px}
+.wrap{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--border);background:#0a3d7a}
+canvas{display:block;width:100%;height:auto;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(10,11,25,.78);color:#fff;text-align:center;padding:20px}
+.overlay.hide{display:none}
+.overlay h2{margin:0;font-size:30px}
+.overlay p{margin:0;color:#c8cbee;line-height:1.5}
+button{font:inherit;font-weight:700;font-size:18px;border:0;border-radius:999px;padding:12px 36px;background:var(--accent);color:var(--accent-text);cursor:pointer}
+button:active{transform:scale(.96)}
+.hint{text-align:center;color:var(--sub);font-size:13px;margin:10px 0 0}
+</style>
+</head>
+<body>
+<main>
+<h1>🧱 벽돌깨기</h1>
+<div class="hud">
+  <div><small>단계</small><b id="stage">1</b></div>
+  <div><small>점수</small><b id="score">0</b></div>
+  <div><small>최고 점수</small><b id="best">0</b></div>
+  <div><small>생명</small><b id="lives">❤❤❤</b></div>
+</div>
+<div class="wrap">
+  <canvas id="c" width="480" height="560"></canvas>
+  <div class="overlay" id="ov">
+    <h2 id="ovTitle">벽돌깨기</h2>
+    <p id="ovMsg">← → 키로 패들을 움직여요<br>(모바일은 화면을 드래그)</p>
+    <button id="startBtn">시작</button>
+  </div>
+</div>
+<p class="hint">벽돌 +10점 · 회색 벽돌은 2번 · ★ 벽돌을 깨면 공이 늘어요 · 공이 다 떨어지면 생명 -1</p>
+</main>
+<script>
+(function(){
+var cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=480,H=560;
+var elStage=document.getElementById('stage'),elScore=document.getElementById('score'),elBest=document.getElementById('best'),elLives=document.getElementById('lives');
+var ov=document.getElementById('ov'),ovTitle=document.getElementById('ovTitle'),ovMsg=document.getElementById('ovMsg'),btn=document.getElementById('startBtn');
+var COLORS=['#ff5d73','#ff9f43','#feca57','#1dd1a1','#a55eea'];
+var COLS=8,ROWS=5,BW=52,BH=20,GAP=6,OX=(W-(COLS*BW+(COLS-1)*GAP))/2,OY=50;
+var best=0;try{best=+localStorage.getItem('brick-best')||0}catch(e){}
+elBest.textContent=best;
+
+var s,paddle,balls=[],bricks,keys={left:false,right:false},raf=null,last=0;
+
+function makeBricks(){
+  bricks=[];var ph=Math.min(0.4,0.15+0.05*(s.stage-1));
+  for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){
+    var hard=Math.random()<ph,item=!hard&&Math.random()<0.1;
+    bricks.push({x:OX+c*(BW+GAP),y:OY+r*(BH+GAP),c:COLORS[r],alive:true,hp:hard?2:1,hard:hard,item:item});
+  }
+}
+function resetBall(wait){
+  balls=[{x:paddle.x+paddle.w/2,y:paddle.y-11,r:10,vx:0,vy:0}];
+  s.wait=wait||0.8;
+}
+function launch(){
+  var a=(Math.random()*60-30)*Math.PI/180,ball=balls[0];
+  ball.vx=s.speed*Math.sin(a);ball.vy=-s.speed*Math.cos(a);
+}
+function addBall(){
+  var src=balls[0]||{x:paddle.x+paddle.w/2,y:paddle.y-11},a=(Math.random()*100-50)*Math.PI/180;
+  balls.push({x:src.x,y:src.y,r:10,vx:s.speed*Math.sin(a),vy:-s.speed*Math.cos(a)});
+}
+function nextStage(){
+  s.stage++;s.base=300+100*(s.stage-1);s.speed=s.base;s.banner=1.6;
+  makeBricks();resetBall(1.6);updateHud();
+}
+function newGame(){
+  s={score:0,lives:3,speed:300,base:300,stage:1,banner:0,state:'play',wait:0};
+  paddle={w:90,h:12,x:(W-90)/2,y:H-36,v:460};
+  makeBricks();resetBall(0.8);updateHud();
+  ov.classList.add('hide');
+  last=performance.now();
+  if(!raf)raf=requestAnimationFrame(loop);
+}
+var ac=null,wavEl=null;
+function initAudio(){
+  try{
+    var A=window.AudioContext||window.webkitAudioContext;
+    if(!ac&&A){
+      ac=new A();
+      var sb=ac.createBuffer(1,1,22050),src=ac.createBufferSource();
+      src.buffer=sb;src.connect(ac.destination);src.start(0);
+    }
+    if(ac&&ac.state!=='running')ac.resume();
+  }catch(e){}
+}
+function beepWA(){
+  var t=ac.currentTime;
+  [[1175,0.5],[2350,0.15]].forEach(function(p){
+    var o=ac.createOscillator(),g=ac.createGain();
+    o.type='sine';o.frequency.value=p[0];
+    g.gain.setValueAtTime(p[1],t);g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+    o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+0.55);
+  });
+}
+function makeWav(){
+  var sr=22050,n=Math.floor(sr*0.5),buf=new ArrayBuffer(44+n*2),v=new DataView(buf),i;
+  function str(o,s){for(var k=0;k<s.length;k++)v.setUint8(o+k,s.charCodeAt(k));}
+  str(0,'RIFF');v.setUint32(4,36+n*2,true);str(8,'WAVE');str(12,'fmt ');
+  v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+  str(36,'data');v.setUint32(40,n*2,true);
+  for(i=0;i<n;i++){var t=i/sr;
+    v.setInt16(44+i*2,(Math.sin(6.2832*1175*t)*0.6*Math.exp(-t*9)+Math.sin(6.2832*2350*t)*0.2*Math.exp(-t*12))*32000,true);}
+  return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+}
+function beepEl(){
+  try{
+    if(!wavEl){wavEl=new Audio(makeWav());wavEl.volume=1;}
+    var a=wavEl.cloneNode();a.volume=1;
+    var p=a.play();if(p&&p.catch)p.catch(function(){});
+  }catch(e){}
+}
+function ding(){
+  initAudio();
+  if(ac&&ac.state==='running'){try{beepWA();return;}catch(e){}}
+  beepEl();
+}
+['pointerdown','touchend','keydown','click'].forEach(function(ev){document.addEventListener(ev,initAudio,{passive:true});});
+function updateHud(){
+  elScore.textContent=s.score;elStage.textContent=s.stage;
+  if(s.score>best){best=s.score;elBest.textContent=best;try{localStorage.setItem('brick-best',best)}catch(e){}}
+  var h='';for(var i=0;i<3;i++)h+=i<s.lives?'❤':'🖤';elLives.textContent=h;
+}
+function gameOver(){
+  s.state='over';
+  if(s.score>best){best=s.score;elBest.textContent=best;try{localStorage.setItem('brick-best',best)}catch(e){}}
+  ovTitle.textContent='게임 오버';
+  ovMsg.innerHTML='점수 <b>'+s.score+'</b>점'+(s.score>=best&&s.score>0?'<br>🎉 최고 기록!':'');
+  btn.textContent='다시 하기';
+  ov.classList.remove('hide');
+}
+function update(dt){
+  if(s.state!=='play')return;
+  if(keys.left)paddle.x-=paddle.v*dt;
+  if(keys.right)paddle.x+=paddle.v*dt;
+  paddle.x=Math.max(0,Math.min(W-paddle.w,paddle.x));
+  if(s.banner>0)s.banner-=dt;
+  if(s.wait>0){
+    s.wait-=dt;balls[0].x=paddle.x+paddle.w/2;balls[0].y=paddle.y-11;
+    if(s.wait<=0)launch();
+    return;
+  }
+  var spawn=0;
+  for(var k=balls.length-1;k>=0;k--){
+  var ball=balls[k];
+  ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;
+  if(ball.x<ball.r){ball.x=ball.r;ball.vx=Math.abs(ball.vx)}
+  if(ball.x>W-ball.r){ball.x=W-ball.r;ball.vx=-Math.abs(ball.vx)}
+  if(ball.y<ball.r){ball.y=ball.r;ball.vy=Math.abs(ball.vy)}
+  // paddle
+  if(ball.vy>0&&ball.y+ball.r>=paddle.y&&ball.y+ball.r<=paddle.y+paddle.h+10&&ball.x>=paddle.x-4&&ball.x<=paddle.x+paddle.w+4){
+    var rel=(ball.x-(paddle.x+paddle.w/2))/(paddle.w/2);
+    var a=rel*60*Math.PI/180;
+    ball.vx=s.speed*Math.sin(a);ball.vy=-s.speed*Math.cos(a);
+    ball.y=paddle.y-ball.r;
+  }
+  // bricks
+  for(var i=0;i<bricks.length;i++){
+    var b=bricks[i];if(!b.alive)continue;
+    var cx=Math.max(b.x,Math.min(ball.x,b.x+BW)),cy=Math.max(b.y,Math.min(ball.y,b.y+BH));
+    var dx=ball.x-cx,dy=ball.y-cy;
+    if(dx*dx+dy*dy<ball.r*ball.r){
+      b.hp--;if(b.hp<=0){b.alive=false;s.score+=10;if(b.item)spawn++;}ding();
+      if(Math.abs(dx)>Math.abs(dy))ball.vx=-ball.vx;else ball.vy=-ball.vy;
+      s.speed=Math.min(640,s.speed+3);
+      var m=Math.hypot(ball.vx,ball.vy);ball.vx*=s.speed/m;ball.vy*=s.speed/m;
+      updateHud();break;
+    }
+  }
+  if(ball.y-ball.r>H)balls.splice(k,1);
+  }
+  for(;spawn>0&&balls.length<4;spawn--)addBall();
+  if(bricks.every(function(b){return !b.alive}))nextStage();
+  else if(balls.length===0){s.lives--;updateHud();if(s.lives<=0)gameOver();else resetBall(1);}
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function wave(base,amp,len,spd,col){
+  var t=performance.now()/1000;
+  ctx.beginPath();ctx.moveTo(0,H);
+  for(var x=0;x<=W;x+=8)ctx.lineTo(x,base+Math.sin(x/len+t*spd)*amp);
+  ctx.lineTo(W,H);ctx.closePath();ctx.fillStyle=col;ctx.fill();
+}
+function drawSea(){
+  var g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#8be3f7');g.addColorStop(0.45,'#2fa8dc');g.addColorStop(1,'#0a3d7a');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.beginPath();ctx.arc(400,300,26,0,7);ctx.fillStyle='rgba(255,255,255,0.18)';ctx.fill();
+  wave(H-70,6,38,1.2,'rgba(255,255,255,0.10)');
+  wave(H-45,7,52,-0.9,'rgba(120,210,255,0.16)');
+  wave(H-20,5,30,1.6,'rgba(10,61,122,0.35)');
+}
+function drawPizza(ball){
+  var r=ball.r*1.2,ang=(ball.vx||ball.vy)?Math.atan2(ball.vy,ball.vx)+Math.PI/2:0;
+  ctx.save();ctx.translate(ball.x,ball.y);ctx.rotate(ang);
+  ctx.beginPath();ctx.moveTo(0,r);ctx.lineTo(-r*0.85,-r*0.6);ctx.quadraticCurveTo(0,-r*1.5,r*0.85,-r*0.6);ctx.closePath();
+  ctx.fillStyle='#ffcc4d';ctx.fill();
+  ctx.beginPath();ctx.moveTo(-r*0.85,-r*0.6);ctx.quadraticCurveTo(0,-r*1.5,r*0.85,-r*0.6);
+  ctx.lineWidth=4;ctx.lineCap='round';ctx.strokeStyle='#d9822b';ctx.stroke();
+  ctx.fillStyle='#e63946';
+  ctx.beginPath();ctx.arc(-r*0.22,-r*0.2,r*0.2,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(r*0.25,-r*0.05,r*0.17,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(0,r*0.4,r*0.13,0,7);ctx.fill();
+  ctx.restore();
+}
+function draw(){
+  drawSea();
+  if(!s)return;
+  bricks.forEach(function(b){
+    if(!b.alive)return;
+    ctx.fillStyle=b.hard?(b.hp>1?'#59606e':'#9aa1b0'):b.c;rr(b.x,b.y,BW,BH,4);ctx.fill();
+    if(b.hard){ctx.strokeStyle='#dfe3ec';ctx.lineWidth=2;ctx.stroke();
+      if(b.hp<2){ctx.beginPath();ctx.moveTo(b.x+14,b.y+3);ctx.lineTo(b.x+22,b.y+10);ctx.lineTo(b.x+17,b.y+13);ctx.lineTo(b.x+27,b.y+18);ctx.strokeStyle='#3a3f4b';ctx.lineWidth=1.5;ctx.stroke();}}
+    if(b.item){ctx.fillStyle='#fff';ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',b.x+BW/2,b.y+BH/2+1);}
+  });
+  ctx.fillStyle='#e8e9ff';rr(paddle.x,paddle.y,paddle.w,paddle.h,6);ctx.fill();
+  balls.forEach(drawPizza);
+  if(s.banner>0){ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(0,H/2-40,W,70);ctx.fillStyle='#fff';ctx.font='bold 34px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(s.stage+'단계! 더 빨라져요',W/2,H/2-5);}
+}
+function loop(t){
+  var dt=Math.min(0.033,(t-last)/1000);last=t;
+  update(dt);draw();
+  raf=requestAnimationFrame(loop);
+}
+// 입력
+window.addEventListener('keydown',function(e){
+  if(e.key==='ArrowLeft'){keys.left=true;e.preventDefault()}
+  if(e.key==='ArrowRight'){keys.right=true;e.preventDefault()}
+});
+window.addEventListener('keyup',function(e){
+  if(e.key==='ArrowLeft')keys.left=false;
+  if(e.key==='ArrowRight')keys.right=false;
+});
+function pointerMove(e){
+  if(!s||s.state!=='play')return;
+  var rect=cv.getBoundingClientRect();
+  paddle.x=Math.max(0,Math.min(W-paddle.w,(e.clientX-rect.left)*W/rect.width-paddle.w/2));
+}
+cv.addEventListener('pointermove',pointerMove);
+cv.addEventListener('pointerdown',pointerMove);
+btn.addEventListener('click',function(){btn.blur();initAudio();newGame();});
+draw();
+})();
+</script>
+</body>
+</html>
