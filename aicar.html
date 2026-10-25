@@ -1,0 +1,1803 @@
+<title>자율주행 알고리즘 연구실 v3</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 왼쪽 시험 주행로(도로 + 한 줄 판단, 멈추면 자세히) · 오른쪽 알고리즘 설계 · 아래 실험 비교표 */
+:root {
+  --bg: #eef2f6; --surface: #ffffff; --surface-2: #f5f7fa; --line: #d6dde6; --line-2: #e6ebf1;
+  --fg: #1a2532; --muted: #5a6879; --faint: #8794a3;
+  --accent: #2f66c9; --accent-ink: #ffffff; --accent-soft: #e3ecfa;
+  --ok: #1f8a57; --ok-soft: #dff2e7; --warn: #b26b00; --warn-soft: #fbedd5; --danger: #cf3a35; --danger-soft: #fbe2e0;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 12px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10151b; --surface: #182029; --surface-2: #1e2731; --line: #2d3946; --line-2: #25303b;
+  --fg: #e6ebf1; --muted: #9aa8b7; --faint: #6e7c8b;
+  --accent: #6aa0f0; --accent-ink: #0b1626; --accent-soft: #1c2d47;
+  --ok: #52c78e; --ok-soft: #173427; --warn: #e6a43c; --warn-soft: #3a2d15; --danger: #f26d63; --danger-soft: #3e1e1c;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10151b; --surface: #182029; --surface-2: #1e2731; --line: #2d3946; --line-2: #25303b;
+  --fg: #e6ebf1; --muted: #9aa8b7; --faint: #6e7c8b;
+  --accent: #6aa0f0; --accent-ink: #0b1626; --accent-soft: #1c2d47;
+  --ok: #52c78e; --ok-soft: #173427; --warn: #e6a43c; --warn-soft: #3a2d15; --danger: #f26d63; --danger-soft: #3e1e1c;
+  color-scheme: dark }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 40px; }
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.top h1 { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.top h1 .mark { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #ef5350; color: #fff; font-size: 12px; font-weight: 700; }
+.top p { margin: 4px 0 8px; color: var(--muted); max-width: 64ch; }
+.flow { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+.flow li { display: flex; align-items: center; gap: 4px; }
+.flow li + li::before { content: "→"; color: var(--faint); }
+
+.lab { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1000px) { .lab { grid-template-columns: minmax(0, 1fr) minmax(400px, 0.92fr); align-items: start; } }
+.sim, .design { display: grid; gap: 12px; min-width: 0; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.panel > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.panel h2 { font-size: 15px; font-weight: 700; }
+.panel h2 small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 6px; }
+.label { font-size: 11px; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; font-weight: 400; }
+
+.btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 7px 12px; font-weight: 600; cursor: pointer; min-height: 36px; }
+.btn:hover { border-color: var(--faint); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { padding: 4px 9px; min-height: 30px; font-size: 12px; }
+.btn.ghost { background: transparent; }
+.btn.armed { background: var(--danger); border-color: var(--danger); color: #fff; }
+.icon-btn { border: 1px solid transparent; background: transparent; border-radius: 6px; width: 30px; height: 30px; cursor: pointer; color: var(--muted); display: inline-grid; place-items: center; font-size: 13px; }
+.icon-btn:hover { background: var(--surface-2); border-color: var(--line); color: var(--fg); }
+.icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.icon-btn.armed { width: auto; padding: 0 9px; background: var(--danger); border-color: var(--danger); color: #fff; font-size: 12px; font-weight: 700; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface-2); }
+.seg button { border: 0; background: transparent; padding: 6px 11px; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--muted); min-height: 34px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+select, input[type="number"], input[type="text"] { background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; min-height: 32px; min-width: 0; }
+input[type="number"] { width: 78px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+input[type="number"]::placeholder { color: var(--danger); font-weight: 700; }
+input.empty { border-color: var(--danger); background: var(--danger-soft); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.field { display: grid; gap: 4px; }
+
+/* 왼쪽: 주행 */
+.exp { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; }
+.exp .field.grow { flex: 1 1 220px; }
+.goal { margin: 0; font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; }
+.road { border-radius: var(--r); overflow: hidden; border: 1px solid var(--line); background: #e7f4e4; }
+.road canvas { display: block; width: 100%; height: clamp(380px, calc(100vh - 215px), 720px); }
+.scen-name { font-weight: 700; font-size: 14px; padding: 4px 0; }
+.timeline { display: grid; gap: 4px; }
+.segs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-right: 92px; }
+.segs span { font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; padding: 2px 4px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.segs span.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.segs span.hit { border-color: var(--danger); color: var(--danger); }
+.segs span.on.hit { color: var(--accent-ink); box-shadow: inset 0 -3px 0 var(--danger); }
+.tl-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.tl-row .num { width: 82px; text-align: right; }
+.track { position: relative; flex: 1; height: 8px; border-radius: 4px; background: var(--line-2); overflow: visible; }
+.track .fill { height: 100%; width: 0; background: var(--accent); border-radius: 4px; }
+.track .boom { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--danger); border: 2px solid var(--surface); }
+.track .tick { position: absolute; top: -2px; width: 2px; height: 12px; background: var(--surface); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 12px; border-radius: 3px; border: 2px solid; }
+.sw-line { border-color: #3b6fd8; border-style: dashed; background: rgba(59,111,216,0.15); }
+.sw-ok { border-color: #2fae6e; background: rgba(47,174,110,0.35); }
+.sw-no { border-color: #e5484d; background: rgba(229,72,77,0.35); }
+.transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.progress-unused { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.progress .track { flex: 1; height: 6px; border-radius: 3px; background: var(--line-2); overflow: hidden; }
+.progress .fill { height: 100%; width: 0; background: var(--accent); }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); cursor: pointer; }
+
+.judge { display: grid; gap: 2px; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.judge .act { font-size: 16px; font-weight: 700; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.judge .rule-tag { font-size: 12px; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 99px; padding: 1px 9px; }
+.judge .rule-tag.none { background: var(--faint); }
+.judge .note { font-size: 12px; font-weight: 500; color: var(--muted); }
+.judge .nums { font-size: 13px; color: var(--muted); font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.judge .nums b { color: var(--fg); font-weight: 600; }
+.tally { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 99px; padding: 3px 10px; font-size: 12px; background: var(--surface); border: 1px solid var(--line); }
+.chip b { font-family: var(--font-num); font-weight: 600; }
+.chip.bad { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
+.chip.warn { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.endnote { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--ok-soft); color: var(--ok); font-size: 13px; font-weight: 600; }
+.peek { margin: 0; font-size: 12px; color: var(--muted); }
+
+.detail h3 { font-size: 13px; font-weight: 700; }
+.sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.side { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; font-size: 12px; }
+.side .h { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; }
+.side .h em { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 99px; }
+.side.safe .h em { background: var(--ok-soft); color: var(--ok); }
+.side.unsafe .h em { background: var(--danger-soft); color: var(--danger); }
+.side.none .h em { background: var(--surface-2); color: var(--muted); }
+.side div { display: flex; justify-content: space-between; color: var(--muted); }
+.side .num { color: var(--fg); }
+.mk-ok { color: var(--ok); font-weight: 700; }
+.mk-no { color: var(--danger); font-weight: 700; }
+.checks { display: grid; gap: 6px; }
+.chk { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; display: grid; gap: 3px; font-size: 13px; }
+.chk .h { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.chk .h .res { font-size: 12px; font-weight: 600; }
+.chk .c { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.chk.fire { border-color: var(--accent); background: var(--accent-soft); }
+.chk.fire .res { color: var(--accent); }
+.chk.skip { opacity: 0.5; }
+.chk.blocked { border-color: var(--warn); border-style: dashed; background: var(--warn-soft); }
+.chk.blocked .res { color: var(--warn); }
+.conflict { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--fg); font-size: 12.5px; }
+.conflict b { color: var(--warn); font-size: 13px; }
+.conflict span b { color: var(--fg); font-size: inherit; }
+.conflict.one { background: var(--surface-2); }
+.conflict.one b { color: var(--fg); }
+.usage { display: grid; gap: 5px; }
+.usage .u { display: grid; grid-template-columns: 56px minmax(0, 1fr) 46px; gap: 8px; align-items: center; font-size: 12px; }
+.usage .bar { height: 8px; border-radius: 4px; background: var(--line-2); overflow: hidden; }
+.usage .bar i { display: block; height: 100%; background: var(--accent); }
+.usage .num { text-align: right; color: var(--muted); }
+.incident { border: 1px solid var(--danger-soft); border-left: 3px solid var(--danger); border-radius: 8px; padding: 8px 10px; display: grid; gap: 4px; font-size: 12px; }
+.incident .h { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; color: var(--danger); font-size: 13px; }
+.incident p { margin: 0; color: var(--muted); }
+.mini { overflow-x: auto; }
+.mini table { border-collapse: collapse; width: 100%; font-size: 11px; }
+.mini th, .mini td { padding: 2px 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line-2); }
+.mini th:last-child, .mini td:last-child { text-align: left; }
+.mini th { color: var(--muted); font-weight: 600; }
+.empty { color: var(--muted); font-size: 13px; margin: 0; }
+.dgrid { display: grid; gap: 14px; }
+
+/* 오른쪽: 설계 */
+.design-head input[type="text"] { font-weight: 600; font-size: 15px; width: 100%; }
+.target { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; padding-top: 8px; border-top: 1px dashed var(--line-2); }
+.target label { font-weight: 600; font-size: 13px; }
+.target .unit { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.rules { display: grid; gap: 10px; }
+.rule { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: grid; gap: 8px; padding: 10px 12px; }
+.rule.firing { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.rule.blank { border-color: var(--danger); }
+.rule .rh { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.rule .rh .no { font-weight: 700; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.rule .rh .live { font-size: 11px; font-weight: 600; color: var(--accent-ink); background: var(--accent); border-radius: 99px; padding: 1px 8px; visibility: hidden; }
+.rule.firing .rh .live { visibility: visible; }
+.kw { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; min-width: 40px; }
+.cond { display: grid; gap: 3px; }
+.cond .line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cond select.var { flex: 1 1 160px; }
+.cond .unit-t { font-size: 12px; color: var(--muted); }
+.cond .vh { font-size: 11px; color: var(--faint); margin: 0; padding-left: 2px; }
+.joinrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.then { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 6px; border-top: 1px dashed var(--line-2); }
+.then select { flex: 1 1 200px; font-weight: 600; }
+.why { display: grid; gap: 3px; }
+.why label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.why input { width: 100%; font-size: 13px; }
+.warnline { font-size: 12px; color: var(--warn); margin: 0; }
+.errline { font-size: 12px; color: var(--danger); margin: 0; font-weight: 600; }
+.laneq { border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line-2); padding: 10px 12px; display: grid; gap: 8px; font-size: 13px; }
+.laneq .t { font-weight: 700; font-size: 13px; color: var(--accent); }
+.laneq .t small { font-weight: 500; color: var(--muted); }
+.laneq p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; line-height: 1.9; }
+.laneq input[type="number"] { width: 64px; }
+
+.code { margin: 0; padding: 10px 12px; border-radius: 8px; background: #1f2a37; color: #e8eef5; font-family: var(--font-num); font-size: 12.5px; line-height: 1.7; overflow-x: auto; white-space: pre; }
+.code .k { color: #8ec5ff; font-weight: 600; }
+.code .a { color: #ffd479; }
+.code .x { color: #8b97a6; }
+.code .ln { display: block; padding: 0 6px; margin: 0 -6px; border-radius: 4px; }
+.code .ln.firing { background: rgba(142,197,255,0.22); }
+.code .ln.dead { opacity: 0.45; }
+.rule .kwbig { font-family: var(--font-num); font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 1px 8px; }
+
+/* 비교표 */
+.condline { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; font-size: 13px; }
+.condline b { font-weight: 700; }
+.results .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.results table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 13px; }
+.results th, .results td { padding: 7px 8px; border-bottom: 1px solid var(--line-2); text-align: right; white-space: nowrap; vertical-align: top; }
+.results tbody tr:last-child td { border-bottom: 0; }
+.results th { background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: 12px; }
+.results td.l, .results th.l { text-align: left; }
+.results td.dsg { white-space: normal; min-width: 180px; }
+.results td.dsg .nm { font-weight: 600; }
+.results td.dsg .chg { display: block; font-size: 12px; color: var(--muted); }
+.results td.dsg .cc { display: block; font-size: 11px; color: var(--faint); }
+.results td .d { display: block; font-size: 11px; font-family: var(--font-num); }
+.d.better { color: var(--ok); } .d.worse { color: var(--danger); } .d.same { color: var(--faint); }
+.results tr.base td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.results .tag { display: inline-block; font-size: 11px; padding: 0 7px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); margin-top: 2px; }
+.results .acts { display: flex; gap: 2px; justify-content: flex-start; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.fold summary { cursor: pointer; font-size: 13px; font-weight: 700; padding: 2px 0; }
+.fold[open] summary { margin-bottom: 6px; }
+.fold .defs { margin-top: 4px; }
+.defs { display: grid; gap: 2px; font-size: 12px; color: var(--muted); margin: 0; padding-left: 18px; }
+.foot { font-size: 12px; color: var(--faint); margin: 0; }
+.endnote { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.endnote span { margin-right: auto; }
+
+.dlg { position: fixed; inset: 0; background: rgba(10, 16, 24, 0.45); display: grid; place-items: center; z-index: 20;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.dlg .box { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; width: min(560px, 100%); display: grid; gap: 10px; max-height: 90vh; overflow: auto; }
+.dlg textarea { width: 100%; min-height: 200px; font-family: var(--font-num); font-size: 12px; background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 30; max-width: calc(100% - 32px); }
+@media (max-width: 440px) { .sides { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="mark" aria-hidden="true">AV</span>자율주행 알고리즘 연구실</h1>
+      <p>기본 알고리즘을 그대로 달려 보고, 문제를 찾아 판단 규칙을 고친 뒤, 같은 조건에서 다시 달려 결과를 비교하세요.</p>
+    </div>
+    <ol class="flow" aria-label="실험 순서">
+      <li>관찰</li><li>문제 발견</li><li>원인 분석</li><li>규칙 수정</li><li>같은 조건 재실험</li><li>비교·검증</li>
+    </ol>
+  </header>
+
+  <main class="lab">
+    <section class="sim" aria-label="가상 주행 시뮬레이터">
+      <div class="panel">
+        <div class="exp">
+          <div class="field grow"><span class="label">시나리오</span><span class="scen-name">종합 주행 · 60초 · 교통량 보통 (모든 실험 같은 조건)</span></div>
+        </div>
+        <p class="goal" id="goal"></p>
+      </div>
+      <div class="road"><canvas id="cv" width="440" height="560" aria-label="4차로 주행 화면. 빨간 차가 내 차이고 화면 위쪽이 진행 방향입니다."></canvas></div>
+      <div class="legend" aria-label="도로 화면 표시 설명">
+        <span><i class="sw sw-line"></i>규칙에 쓴 ‘앞차 거리’ 기준선</span>
+        <span><i class="sw sw-ok"></i>옆 차선 여유 기준: 만족</span>
+        <span><i class="sw sw-no"></i>옆 차선 여유 기준: 부족</span>
+      </div>
+      <div class="timeline" aria-label="주행 구간과 진행 상황">
+        <div class="segs" id="segs"></div>
+        <div class="tl-row"><div class="track" id="track"><div class="fill" id="pfill"></div></div><span class="num" id="ptext">0.0 / 60초</span></div>
+      </div>
+      <div class="transport">
+        <button class="btn primary" id="run">▶ 주행</button>
+        <button class="btn" id="reset">↺ 처음부터</button>
+        <div class="seg" id="speeds" role="group" aria-label="배속"></div>
+        <label class="check"><input type="checkbox" id="pauseCrash" checked> 충돌하면 멈춤</label>
+      </div>
+      <div class="judge">
+        <div class="act" id="j-act"></div>
+        <div class="nums" id="j-nums"></div>
+      </div>
+      <div class="tally" id="tally"></div>
+      <div class="endnote" id="endnote" hidden><span>60초 실험이 끝났어요.</span>
+        <button class="btn small primary" id="addRow2">비교표에 추가</button>
+        <button class="btn small ghost" id="showDetail">판단 근거 자세히 보기</button></div>
+      <p class="peek" id="peek">일시정지하면 그 순간의 판단 근거를 자세히 볼 수 있어요.</p>
+
+      <section class="panel detail" id="detail" hidden aria-label="멈춘 시점 판단 근거">
+        <header><h2>멈춘 시점 자세히 보기</h2><span class="hint num" id="d-time"></span></header>
+        <div class="dgrid">
+          <div class="sides" id="sides"></div>
+          <div class="field"><h3>규칙 검사 순서 <span class="hint">위에서부터 검사해 처음 참인 규칙 하나만 실행 · 주황 점선은 참이었지만 우선순위에 밀린 규칙</span></h3><div class="checks" id="checks"></div></div>
+          <details class="fold" id="usageFold"><summary>지금까지 규칙별 실행 시간</summary><div class="usage" id="usage"></div></details>
+          <details class="fold" id="incFold"><summary>사고 보고서 <span class="hint" id="inc-count"></span></summary><div class="checks" id="incidents"></div></details>
+        </div>
+      </section>
+
+      <section class="panel results" aria-label="실험 비교표">
+        <header>
+          <h2>실험 비교표</h2>
+          <div class="row">
+            <button class="btn small primary" id="addRow" disabled>현재 결과 비교표에 추가</button>
+            <button class="btn small" id="csv">CSV 저장</button>
+            <button class="btn small ghost" id="clearRows">표 비우기</button>
+          </div>
+        </header>
+        <div class="condline"><span id="cmpCond"></span></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th class="l">#</th><th class="l">설계 · 바꾼 점</th><th>충돌</th><th>위험 시간</th><th>급제동</th><th>차선 변경</th><th>평균 속도</th><th class="l"><span class="sr">관리</span></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+        <details class="fold"><summary>지표 설명</summary><ul class="defs">
+          <li>바꾼 점: 같은 조건의 첫 실험(기준, 파란 표시)과 비교해 설계에서 달라진 부분이에요.</li>
+          <li>위험 시간: 앞차와의 시간 간격(거리 ÷ 내 속도)이 1초 미만이거나, 충돌 예상시간이 2초 미만이었던 시간의 합</li>
+          <li>급제동: 1초에 6 m/s 이상(약 22 km/h) 속도를 줄이는 제동을 시작한 횟수</li>
+          <li>충돌·위험 시간·급제동은 줄면 초록, 평균 속도는 늘면 초록으로 표시해요. 차선 변경 횟수는 좋고 나쁨을 표시하지 않아요.</li>
+          <li>CSV에는 진행 거리와 바꾼 점 전체가 함께 저장돼요.</li>
+        </ul></details>
+      </section>
+    </section>
+
+    <section class="design" id="design" aria-label="알고리즘 설계"></section>
+  </main>
+
+  <p class="foot">교육용으로 단순화한 규칙 기반 시뮬레이션이에요. 주변 차량은 앞차와 거리를 유지하는 교통 모델로 움직이며, 실제 차량 제어나 안전 인증과는 다릅니다.</p>
+</div>
+
+<div class="dlg" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+  <div class="box">
+    <h2 id="dlg-title" style="font-size:16px"></h2>
+    <p class="hint" id="dlg-text"></p>
+    <input type="file" id="dlg-file" accept=".json,application/json" hidden>
+    <textarea id="dlg-area" spellcheck="false"></textarea>
+    <p class="errline" id="dlg-err" hidden></p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn" id="dlg-copy">복사</button>
+      <button class="btn primary" id="dlg-ok">적용</button>
+      <button class="btn ghost" id="dlg-close">닫기</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+// ===== 시뮬레이션 엔진 (DOM 없음) =====
+// 단위: 거리 m, 속도 m/s(내부), 시간 s. 화면/규칙에는 km/h로 보여줌.
+const LANE_W = 3.5, NLANES = 4, DT = 0.05, SIM_T = 60;
+const SENSOR_F = 150, SENSOR_R = 60, CAR_W = 1.9, SENSE_W = 2.2;
+const KMH = 1 / 3.6;
+const EGO_LC_DUR = 2.5, NPC_LC_DUR = 2.5, CUT_LC_DUR = 2.0;
+
+function makeRng(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const VARS = {
+  ttc:    { label: '충돌 예상시간(TTC)', unit: '초' },
+  gap:    { label: '앞차 거리', unit: 'm' },
+  speed:  { label: '내 차 속도', unit: 'km/h' },
+  dv:     { label: '앞차보다 빠른 정도', unit: 'km/h' },
+  lf:     { label: '왼쪽 차선 앞 여유', unit: 'm' },
+  lr:     { label: '왼쪽 차선 뒤 여유', unit: 'm' },
+  rf:     { label: '오른쪽 차선 앞 여유', unit: 'm' },
+  rr:     { label: '오른쪽 차선 뒤 여유', unit: 'm' },
+  since:  { label: '차선 변경 후 지난 시간', unit: '초' },
+  always: { label: '항상 (그 외 모든 상황)', unit: '' }
+};
+const PARAMS = {
+  target: { label: '목표 속도', unit: 'km/h', min: 40, max: 140, step: 5, desc: '도로가 비었을 때 달리고 싶은 속도' }
+};
+// 거리(m) 변수는 오른쪽 값을 '내 속도 × 초'로도 쓸 수 있음
+const M_VARS = ['gap', 'lf', 'lr', 'rf', 'rr'];
+const VAR_HINT = {
+  ttc: '0초 이상 · 가까워지지 않으면 999로 계산',
+  gap: '0~150 m · 앞차가 없으면 999로 계산',
+  speed: '0~150 km/h',
+  dv: '양수면 내가 더 빠름, 음수면 앞차가 더 빠름',
+  lf: '0~150 m · 차로가 없으면 0', rf: '0~150 m · 차로가 없으면 0',
+  lr: '0~60 m · 차로가 없으면 0', rr: '0~60 m · 차로가 없으면 0',
+  since: '0~99초 · 아직 바꾼 적이 없으면 99'
+};
+const ACTIONS = {
+  emergency: '긴급 제동',
+  soft:      '부드럽게 감속',
+  accel:     '가속',
+  target:    '목표 속도로 주행',
+  hold:      '현재 속도 유지',
+  follow:    '앞차 속도에 맞추기 (2초 간격)',
+  left:      '왼쪽 차선으로 변경',
+  right:     '오른쪽 차선으로 변경'
+};
+const OPS = ['<', '≤', '>', '≥'];
+
+const TRAFFIC = { 1: { label: '적음', mean: 140 }, 2: { label: '보통', mean: 55 }, 3: { label: '많음', mean: 18 } };
+
+const SCENARIOS = {
+  1: { name: '종합 주행', short: '종합',
+       goal: '60초 동안 앞차 감속 → 느린 트럭 → 끼어들기 → 앞차 급정지가 차례로 나와요. 어느 구간에서 문제가 생기는지 찾아 규칙을 고치세요.',
+       egoLane: 1, v0: 80, lead: { d: 45, v: 100 },
+       segments: [ { t0: 0, t1: 15, label: '앞차 감속' }, { t0: 15, t1: 30, label: '느린 트럭' },
+                   { t0: 30, t1: 45, label: '끼어들기' }, { t0: 45, t1: 60, label: '앞차 급정지' } ],
+       events: [ { t: 4, type: 'brake', to: 60, a: 3, hold: 4, label: '앞차 감속' },
+                 { t: 10, type: 'brake', to: 45, a: 3.5, hold: 3, label: '앞차 감속' },
+                 { t: 16, type: 'truck', to: 58, label: '느린 트럭' },
+                 { t: 31, type: 'cutin', label: '끼어들기' },
+                 { t: 39, type: 'cutin', label: '끼어들기' },
+                 { t: 47, type: 'brake', to: 0, a: 8, hold: 4, label: '앞차 급정지' } ] }
+};
+
+function defaultDesign() {
+  // 일부러 결함을 넣은 출발 알고리즘: 기준값·순서·조건 범위·행동 문제가 하나씩 있음
+  return {
+    name: '기본 알고리즘',
+    params: { target: 100 },
+    rules: [
+      { join: 'and', conds: [ { v: 'gap', op: '<', mode: 'num', n: 15 } ], act: 'soft', why: '앞차와 가까우면 속도를 줄인다' },
+      { join: 'and', conds: [ { v: 'ttc', op: '<', mode: 'num', n: 1.5 } ], act: 'emergency', why: '곧 부딪힐 것 같으면 급제동한다' },
+      { join: 'and', conds: [ { v: 'gap', op: '<', mode: 'num', n: 40 } ], act: 'left', why: '앞차가 가까워지면 왼쪽 차로로 추월한다' },
+      { join: 'and', conds: [ { v: 'always', op: '<', mode: 'num', n: 0 } ], act: 'accel', why: '그 외에는 속도를 올린다' }
+    ],
+    lane: {}
+  };
+}
+function emptyDesign() {
+  return {
+    name: '나의 알고리즘',
+    params: { target: 100 },
+    rules: [ { join: 'and', conds: [ { v: 'always', op: '<', mode: 'num', n: 0 } ], act: 'target', why: '' } ],
+    lane: {}
+  };
+}
+
+// ---------- 기하 ----------
+const latOv = (xa, xb, thr) => Math.abs(xa - xb) * LANE_W < thr;
+const gapAhead = (a, b) => (b.y - b.len / 2) - (a.y + a.len / 2); // a 앞쪽 범퍼 → b 뒤쪽 범퍼
+const smooth = p => p * p * (3 - 2 * p);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function startLC(veh, to, dur, t) {
+  veh.lc = { from: veh.x, to, t0: t, dur };
+  veh.lane = to;
+}
+function updateLateral(veh, t) {
+  if (!veh.lc) { veh.x = veh.lane; return; }
+  const p = clamp((t - veh.lc.t0) / veh.lc.dur, 0, 1);
+  veh.x = veh.lc.from + (veh.lc.to - veh.lc.from) * smooth(p);
+  if (p >= 1) { veh.x = veh.lc.to; veh.lc = null; }
+}
+
+// ---------- 월드 ----------
+const NPC_COLORS = ['c1', 'c2', 'c3', 'c4', 'c5'];
+
+function addCar(w, o) {
+  const truck = !!o.truck;
+  const c = {
+    id: w.nextId++, lane: o.lane, x: o.lane, y: o.y, v: o.v, v0: o.v0 ?? o.v,
+    len: truck ? 11 : 4.6, truck, T: o.T ?? 1.3, script: null, lc: null,
+    color: o.color || NPC_COLORS[Math.floor(w.R() * NPC_COLORS.length)],
+    hazard: false, acc: 0, lcReady: 0, pendingCut: null
+  };
+  w.cars.push(c);
+  return c;
+}
+
+function createWorld(design, scen, traffic, seed) {
+  const S = SCENARIOS[scen];
+  const R = makeRng((seed | 0) * 7919 + scen * 131 + traffic * 17 + 3);
+  const ego = { lane: S.egoLane, x: S.egoLane, y: 0, v: S.v0 * KMH, a: 0, len: 4.6, lc: null,
+                lastLC: -99, lastEmerg: -99, isEgo: true };
+  const w = {
+    t: 0, design, scen, traffic, seed, S, R, cars: [], ego, nextId: 1,
+    events: S.events.map(e => ({ ...e, done: false, tries: 0 })),
+    banner: null, log: [], incidents: [], finished: false, modified: false,
+    metrics: { collisions: 0, danger: 0, emerg: 0, lc: 0, dist: 0, speedSum: 0, steps: 0 },
+    ruleTime: {}, lastDec: null, lastSens: null, lastLaneCheck: null, lastLaneCheckT: -9,
+    npcFix: 0, eventLog: []
+  };
+  const L = S.lead;
+  const leadLen = L.truck ? 11 : 4.6;
+  const leadY = ego.len / 2 + L.d + leadLen / 2;
+  const lead = addCar(w, { lane: S.egoLane, y: leadY, v: L.v * KMH, v0: L.v * KMH, truck: L.truck, T: 1.2 });
+  lead.isLead = true;
+
+  const laneV = [108, 98, 90, 78];
+  const mean = TRAFFIC[traffic].mean;
+  for (let lane = 0; lane < NLANES; lane++) {
+    let y = -260 + R() * 30;
+    while (y < 1650) {
+      const truck = lane === 3 ? R() < 0.4 : lane === 2 ? R() < 0.15 : false;
+      let v0 = (laneV[lane] + (R() * 2 - 1) * 7) * KMH;
+      if (truck) v0 = Math.min(v0, (74 + R() * 10) * KMH);
+      const len = truck ? 11 : 4.6;
+      const cy = y + len / 2;
+      let skip = false;
+      if (lane === S.egoLane && cy > -40 && cy < leadY + leadLen / 2 + 80) skip = true;
+      if (Math.abs(lane - S.egoLane) === 1 && Math.abs(cy) < 9) skip = true;
+      if (!skip) addCar(w, { lane, y: cy, v: v0, v0, truck, T: 1.0 + R() * 0.6 });
+      const exp = -Math.log(1 - R()) * mean;
+      y += len + 16 + v0 * 0.9 + exp;
+    }
+  }
+  return w;
+}
+
+// ---------- 센서 ----------
+function laneGaps(w, L) {
+  const e = w.ego;
+  if (L < 0 || L >= NLANES) return { front: 0, rear: 0, valid: false, fc: null, rc: null };
+  let front = SENSOR_F, rear = SENSOR_R, fc = null, rc = null, overlap = false;
+  for (const c of w.cars) {
+    if (!latOv(c.x, L, SENSE_W)) continue;
+    const dy = c.y - e.y;
+    if (dy > SENSOR_F + 20 || dy < -SENSOR_R - 20) continue;
+    if (Math.abs(dy) < (c.len + e.len) / 2) { front = 0; rear = 0; fc = c; rc = c; overlap = true; continue; }
+    if (overlap) continue;
+    if (dy > 0) {
+      const g = Math.max(0, gapAhead(e, c));
+      if (g < front) { front = g; fc = c; }
+    } else {
+      const g = Math.max(0, gapAhead(c, e));
+      if (g < rear) { rear = g; rc = c; }
+    }
+  }
+  return { front, rear, valid: true, fc, rc, overlap };
+}
+
+function sense(w) {
+  const e = w.ego;
+  let f = null, fg = Infinity;
+  for (const c of w.cars) {
+    if (c.y <= e.y) continue;
+    if (!latOv(e.x, c.x, SENSE_W)) continue;
+    const g = gapAhead(e, c);
+    if (g < fg) { fg = g; f = c; }
+  }
+  if (fg > SENSOR_F) { f = null; fg = Infinity; }
+  const gap = f ? Math.max(0, fg) : 999;
+  const ttc = f && e.v > f.v ? Math.max(0, fg) / (e.v - f.v) : 999;
+  const dv = f ? (e.v - f.v) * 3.6 : 0;
+  const lg = laneGaps(w, e.lane - 1), rg = laneGaps(w, e.lane + 1);
+  const since = Math.min(99, w.t - e.lastLC);
+  return { gap, ttc, dv, speed: e.v * 3.6, lf: lg.front, lr: lg.rear, rf: rg.front, rr: rg.rear, since,
+           front: f, lg, rg };
+}
+
+// ---------- 규칙 평가 ----------
+function threshold(cond, sens) {
+  const n = cond.n;
+  if (n === null || n === undefined || n === '' || !Number.isFinite(Number(n))) return NaN;
+  return cond.mode === 'time' && M_VARS.includes(cond.v) ? (sens.speed / 3.6) * Number(n) : Number(n);
+}
+function compare(a, op, b) {
+  if (op === '<') return a < b;
+  if (op === '≤') return a <= b;
+  if (op === '>') return a > b;
+  return a >= b;
+}
+function evalRule(rule, sens, P) {
+  const evals = rule.conds.map(c => {
+    if (c.v === 'always') return { ok: true, always: true };
+    const val = sens[c.v], th = threshold(c, sens);
+    return { ok: compare(val, c.op, th), val, th };
+  });
+  const ok = evals.length === 0 ? false : rule.join === 'or' ? evals.some(x => x.ok) : evals.every(x => x.ok);
+  return { ok, evals };
+}
+function decide(w, sens) {
+  const D = w.design;
+  for (let i = 0; i < D.rules.length; i++) {
+    if (evalRule(D.rules[i], sens, D.params).ok) return { rule: i, act: D.rules[i].act };
+  }
+  return { rule: -1, act: 'hold' };
+}
+
+function laneCheck(w, sens) {
+  const LD = w.design.lane;
+  const F = Number(LD.front), Rq = Number(LD.rear);
+  const side = (g) => ({ valid: g.valid, front: g.front, rear: g.rear,
+    fOk: g.front >= F, rOk: g.rear >= Rq, safe: g.valid && g.front >= F && g.rear >= Rq });
+  const L = side(sens.lg), Rr = side(sens.rg);
+  let choice = null;
+  if (L.safe && Rr.safe) {
+    if (LD.prefer === 'left') choice = -1;
+    else if (LD.prefer === 'right') choice = 1;
+    else choice = L.front >= Rr.front ? -1 : 1;
+  } else if (L.safe) choice = -1;
+  else if (Rr.safe) choice = 1;
+  return { left: L, right: Rr, choice };
+}
+
+function canStartLC(w, lane) {
+  const e = w.ego;
+  if (lane < 0 || lane >= NLANES) return '그쪽에는 차로가 없어요';
+  if (e.lc) return '이미 차선을 바꾸는 중';
+  return true;
+}
+
+function egoAccel(w, act, sens) {
+  const e = w.ego, P = w.design.params, vt = P.target * KMH;
+  switch (act) {
+    case 'emergency': return -8;
+    case 'soft': return -3;
+    case 'accel': return 2.0;
+    case 'target': return clamp(0.6 * (vt - e.v), -3, 2);
+    case 'hold': return 0;
+    case 'follow': {
+      if (!sens.front) return clamp(0.6 * (vt - e.v), -3, 2);
+      let a = clamp(0.8 * (sens.front.v - e.v) + 0.12 * (sens.gap - (2 * e.v + 4)), -4, 2);
+      if (a > 0) a = Math.min(a, Math.max(0, 0.6 * (vt - e.v)));
+      return a;
+    }
+  }
+  return 0;
+}
+
+function applyEgo(w, dec, sens) {
+  const e = w.ego;
+  let act = dec.act, note = '', laneTry = null, finalAct = act;
+  if (act === 'left') laneTry = e.lane - 1;
+  if (act === 'right') laneTry = e.lane + 1;
+  let a, dirAct = null;
+  if (laneTry !== null) {
+    dirAct = laneTry < e.lane ? 'left' : 'right';
+    const ok = canStartLC(w, laneTry);
+    if (ok === true) {
+      startLC(e, laneTry, EGO_LC_DUR, w.t);
+      e.lastLC = w.t; w.metrics.lc++;
+      note = (laneTry + 1) + '차로로 변경 시작';
+    } else note = '변경 못 함: ' + ok;
+    a = 0;
+  } else a = egoAccel(w, finalAct, sens);
+  if (e.v * 3.6 >= 150 && a > 0) a = 0;
+  const prevA = e.a;
+  e.a = clamp(a, -9, 3);
+  if (e.a <= -6 && prevA > -6) { w.metrics.emerg++; e.lastEmerg = w.t; }
+  return { finalAct: dirAct || finalAct, note };
+}
+
+// ---------- 주변 차량 ----------
+function leaderOf(w, c) {
+  let best = null, bg = Infinity;
+  const consider = (o) => {
+    if (o === c || o.y <= c.y) return;
+    const inPath = latOv(c.x, o.x, SENSE_W) || (o.lc && o.lane === c.lane && !c.lc);
+    if (!inPath) return;
+    const g = gapAhead(c, o);
+    if (g < bg) { bg = g; best = o; }
+  };
+  for (const o of w.cars) consider(o);
+  consider(w.ego);
+  return best;
+}
+function idm(c, lead) {
+  const a = 1.6, b = 2.5, s0 = 2.5;
+  const free = 1 - Math.pow(c.v / Math.max(c.v0, 0.1), 4);
+  if (!lead) return a * free;
+  const s = Math.max(0.1, gapAhead(c, lead));
+  const dv = c.v - lead.v;
+  const sStar = s0 + Math.max(0, c.v * c.T + c.v * dv / (2 * Math.sqrt(a * b)));
+  return a * (free - (sStar / s) ** 2);
+}
+function npcLaneOk(w, c, L) {
+  if (L < 0 || L >= NLANES) return false;
+  const all = w.cars.concat([w.ego]);
+  for (const o of all) {
+    if (o === c || !latOv(o.x, L, SENSE_W)) continue;
+    if (o.y >= c.y) { if (gapAhead(c, o) < 15) return false; }
+    else { const g = gapAhead(o, c); if (g < 12 + Math.max(0, o.v - c.v) * 2) return false; }
+  }
+  return true;
+}
+function npcAccel(w, c) {
+  if (c.hazard) return 0;
+  const lead = leaderOf(w, c);
+  c._lead = lead;
+  let acc = idm(c, lead);
+  const s = c.script;
+  if (s) {
+    if (s.phase === 'wait' && w.t >= s.at) s.phase = 'brake';
+    if (s.phase === 'brake') {
+      acc = Math.min(acc, -s.a);
+      if (c.v <= s.to + 0.05) { s.phase = 'hold'; s.until = w.t + s.hold; }
+    } else if (s.phase === 'hold') {
+      acc = Math.min(acc, 2 * (s.to - c.v));
+      if (w.t >= s.until) c.script = null;
+    }
+  }
+  return clamp(acc, -9, 2.5);
+}
+function npcLaneLogic(w, c) {
+  if (c.hazard || c.lc || c.script || w.t < c.lcReady) return;
+  if (c.pendingCut) {
+    const pc = c.pendingCut;
+    if (w.t > pc.timeout) { c.pendingCut = null; return; }
+    if (gapAhead(w.ego, c) >= pc.trigger && c.lane !== pc.lane) {
+      startLC(c, pc.lane, CUT_LC_DUR, w.t);
+      c.v0 = Math.max(8, w.ego.v - 15 * KMH);
+      c.pendingCut = null;
+      c.lcReady = w.t + 10;
+      if (c.thenBrake) { const tb = c.thenBrake; c.script = { phase: 'wait', at: w.t + CUT_LC_DUR + 0.3, to: tb.to * KMH, a: tb.a, hold: tb.hold }; c.thenBrake = null; }
+      w.banner = { text: '옆 차선 차량 끼어들기', level: 'warn', until: w.t + 3 };
+    }
+    return;
+  }
+  const lead = c._lead;
+  if (!lead || lead === w.ego) return;
+  const blocked = (lead.hazard || lead.v < 3) && gapAhead(c, lead) < 45;
+  if (!blocked) return;
+  for (const L of [c.lane - 1, c.lane + 1]) {
+    if (npcLaneOk(w, c, L)) { startLC(c, L, NPC_LC_DUR, w.t); c.lcReady = w.t + 6; return; }
+  }
+}
+
+// ---------- 돌발 이벤트 ----------
+function egoFront(w, range) {
+  const e = w.ego; let f = null, fg = Infinity;
+  for (const c of w.cars) {
+    if (c.y <= e.y || c.hazard || !latOv(e.x, c.x, SENSE_W)) continue;
+    const g = gapAhead(e, c);
+    if (g < fg && g <= range) { fg = g; f = c; }
+  }
+  return f;
+}
+function doCutin(w, then) {
+  const e = w.ego;
+  let best = null, gb = Infinity;
+  for (const c of w.cars) {
+    if (c.lc || c.script || c.hazard || c.pendingCut || c.truck) continue;
+    if (Math.abs(c.lane - e.lane) !== 1) continue;
+    const g = gapAhead(e, c);
+    if (g >= 12 && g <= 55 && g < gb) { gb = g; best = c; }
+  }
+  if (best) {
+    startLC(best, e.lane, CUT_LC_DUR, w.t);
+    best.v0 = Math.max(8, e.v - 18 * KMH);
+    best.lcReady = w.t + 10;
+    if (then) best.script = { phase: 'wait', at: w.t + CUT_LC_DUR + 0.3, to: then.to * KMH, a: then.a, hold: then.hold };
+    w.banner = { text: then ? '끼어든 차량 급제동' : '옆 차선 차량 끼어들기', level: 'warn', until: w.t + 3 };
+    return true;
+  }
+  // 옆 차선 뒤에서 빠르게 다가와 끼어드는 차량
+  const sides = [e.lane + 1, e.lane - 1].filter(L => L >= 0 && L < NLANES);
+  sides.sort((a, b) => {
+    const occ = L => w.cars.filter(c => latOv(c.x, L, SENSE_W) && c.y > e.y - 80 && c.y < e.y + 45).length;
+    return occ(a) - occ(b);
+  });
+  for (const L of sides) {
+    const spawnY = e.y - 50;
+    const near = w.cars.some(c => latOv(c.x, L, SENSE_W) && Math.abs(c.y - spawnY) < 22);
+    if (near) continue;
+    const v = e.v + 28 * KMH;
+    const c = addCar(w, { lane: L, y: spawnY, v, v0: v, T: 0.9 });
+    c.pendingCut = { lane: e.lane, trigger: 9, timeout: w.t + 12 };
+    if (then) c.script = null, c.thenBrake = then;
+    return true;
+  }
+  return false;
+}
+function handleEvents(w) {
+  for (const ev of w.events) {
+    if (ev.done || w.t < ev.t) continue;
+    const e = w.ego;
+    if (ev.type === 'brake' || ev.type === 'slow') {
+      const f = egoFront(w, 120);
+      if (f) {
+        if (ev.type === 'slow') {
+          f.v0 = ev.to * KMH; f.script = null;
+          w.banner = { text: '앞차가 느려져요 (' + ev.to + ' km/h)', level: 'info', until: w.t + 3 };
+        } else {
+          f.script = { phase: 'brake', to: ev.to * KMH, a: ev.a, hold: ev.hold };
+          const hard = ev.a >= 6;
+          w.banner = { text: hard ? (ev.to === 0 ? '앞차 급정지' : '앞차 급제동') : '앞차 감속 (→ ' + ev.to + ' km/h)',
+                       level: hard ? 'danger' : 'info', until: w.t + 3 };
+        }
+        w.eventLog.push({ t: w.t, type: ev.type, how: 'front', label: ev.label });
+        ev.done = true;
+      } else if (ev.tries < 6) { ev.tries++; ev.t = w.t + 0.5; }
+      else {
+        doCutin(w, ev.type === 'brake' ? { to: ev.to, a: ev.a, hold: ev.hold } : { to: ev.to, a: 2, hold: 99 });
+        w.eventLog.push({ t: w.t, type: ev.type, how: 'cutin-fallback', label: ev.label });
+        ev.done = true;
+      }
+    } else if (ev.type === 'cutin') {
+      const ok = doCutin(w, null);
+      if (ok || ev.tries >= 10) { ev.done = true; w.eventLog.push({ t: w.t, type: 'cutin', how: ok ? 'ok' : 'skip', label: ev.label }); }
+      else { ev.tries++; ev.t = w.t + 0.5; }
+    } else if (ev.type === 'truck') {
+      const len = 11, y = e.y + e.len / 2 + 115 + len / 2;
+      w.cars = w.cars.filter(c => !(latOv(c.x, e.lane, SENSE_W) && c.y > y - 35 && c.y < y + 25));
+      const c = addCar(w, { lane: e.lane, y, v: ev.to * KMH, v0: ev.to * KMH, truck: true, T: 1.2, color: 'c4' });
+      c.lcReady = 1e9;
+      w.banner = { text: '앞쪽에 느린 트럭 (' + ev.to + ' km/h)', level: 'info', until: w.t + 3 };
+      w.eventLog.push({ t: w.t, type: 'truck', how: 'ok', label: ev.label });
+      ev.done = true;
+    } else if (ev.type === 'stall') {
+      const y = e.y + e.len / 2 + 130;
+      w.cars = w.cars.filter(c => !(latOv(c.x, e.lane, SENSE_W) && Math.abs(c.y - y) < 14));
+      const c = addCar(w, { lane: e.lane, y, v: 0, v0: 0, color: 'stall' });
+      c.hazard = true;
+      w.banner = { text: '전방 130m 고장 차량 정차', level: 'danger', until: w.t + 3.5 };
+      w.eventLog.push({ t: w.t, type: 'stall', how: 'ok' });
+      ev.done = true;
+    }
+  }
+}
+
+// ---------- 충돌 ----------
+function classify(w, c) {
+  const e = w.ego;
+  const dy = c.y - e.y, sumHalf = (c.len + e.len) / 2;
+  const recentLC = w.t - e.lastLC < 3;
+  if (Math.abs(dy) < sumHalf - 1.2 && (e.lc || c.lc)) return '차선 변경 중 측면 접촉';
+  if (dy > 0) {
+    if (c.lc && c.lane === e.lane) return '끼어든 차량과 충돌 (전방)';
+    if (recentLC) return '차선 변경 직후 앞차와 충돌';
+    return c.hazard ? '정차한 고장 차량과 충돌' : '앞차와 충돌 (전방 추돌)';
+  }
+  if (recentLC) return '무리한 차선 변경 후 뒤차가 추돌';
+  if (w.t - e.lastEmerg < 3) return '급제동 후 뒤차가 추돌';
+  return '뒤차가 추돌';
+}
+function checkCollisions(w) {
+  const e = w.ego, hits = [];
+  for (const c of w.cars) {
+    if (!latOv(e.x, c.x, CAR_W)) continue;
+    if (Math.abs(c.y - e.y) < (c.len + e.len) / 2) hits.push(c);
+  }
+  for (const c of hits) {
+    const type = classify(w, c);
+    const d = w.lastDec || { rule: -1, act: 'hold' };
+    const prev = w.eventLog.filter(x => x.t <= w.t + 1e-9).pop();
+    const seg = (w.S.segments || []).find(s => w.t >= s.t0 && w.t < s.t1);
+    w.incidents.push({ t: w.t, type, egoV: e.v * 3.6, otherV: c.v * 3.6, rule: d.rule, act: d.shown || d.act,
+                       log: w.log.slice(-12), after: prev ? { label: prev.label, dt: w.t - prev.t } : null, seg: seg ? seg.label : '' });
+    w.metrics.collisions++;
+    e.v = Math.min(e.v, Math.max(0, c.v)) * 0.6;
+    w.cars = w.cars.filter(o => o !== c);
+    w.banner = { text: '충돌: ' + type, level: 'danger', until: w.t + 3 };
+  }
+  return hits.length;
+}
+function fixNpcOverlaps(w) {
+  const cs = w.cars;
+  for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+    const a = cs[i], b = cs[j];
+    if (Math.abs(a.y - b.y) > 16 || !latOv(a.x, b.x, CAR_W)) continue;
+    const front = a.y > b.y ? a : b, rear = front === a ? b : a;
+    if (gapAhead(rear, front) < 0) {
+      rear.y = front.y - (front.len + rear.len) / 2 - 0.3;
+      rear.v = Math.min(rear.v, front.v);
+      w.npcFix++;
+    }
+  }
+}
+
+// ---------- 한 스텝 ----------
+function step(w) {
+  if (w.finished) return { crashed: 0 };
+  handleEvents(w);
+  const e = w.ego;
+  const sens = sense(w);
+  const dec = decide(w, sens);
+  const res = applyEgo(w, dec, sens);
+  dec.shown = res.finalAct; dec.note = res.note;
+  w.lastSens = sens; w.lastDec = dec;
+  w.ruleTime[dec.rule] = (w.ruleTime[dec.rule] || 0) + DT;
+
+  for (const c of w.cars) c.acc = npcAccel(w, c);
+  for (const c of w.cars) npcLaneLogic(w, c);
+
+  e.v = clamp(e.v + e.a * DT, 0, 150 * KMH);
+  e.y += e.v * DT;
+  updateLateral(e, w.t + DT);
+  for (const c of w.cars) {
+    if (c.hazard) { c.v = 0; continue; }
+    c.v = Math.max(0, c.v + c.acc * DT);
+    c.y += c.v * DT;
+    updateLateral(c, w.t + DT);
+  }
+  fixNpcOverlaps(w);
+  const crashed = checkCollisions(w);
+
+  const m = w.metrics;
+  const headway = e.v > 1 && sens.front ? sens.gap / e.v : 99;
+  if (headway < 1.0 || sens.ttc < 2.0) m.danger += DT;
+  m.dist += e.v * DT; m.speedSum += e.v * 3.6; m.steps++;
+
+  w.t += DT;
+  if (Math.round(w.t / DT) % 5 === 0) {
+    w.log.push({ t: w.t, v: e.v * 3.6, gap: sens.gap, ttc: sens.ttc, rule: dec.rule, act: dec.shown, note: dec.note });
+    if (w.log.length > 60) w.log.shift();
+  }
+  w.cars = w.cars.filter(c => c.y > e.y - 350);
+  if (w.t >= SIM_T - 1e-9) w.finished = true;
+  return { crashed };
+}
+
+function designBlanks(D) {
+  const out = [];
+  D.rules.forEach((r, i) => r.conds.forEach((c) => { if (c.v !== 'always' && !Number.isFinite(threshold(c, { speed: 100 }))) out.push(i); }));
+  return { rules: [...new Set(out)], lane: false };
+}
+function summary(w) {
+  const m = w.metrics;
+  return { collisions: m.collisions, danger: m.danger, emerg: m.emerg, lc: m.lc,
+           avg: m.steps ? m.speedSum / m.steps : 0, dist: m.dist, t: w.t };
+}
+
+if (typeof module !== 'undefined') module.exports = { emptyDesign, createWorld, step, summary, defaultDesign, SCENARIOS, TRAFFIC, sense, laneCheck, evalRule, designBlanks };
+
+</script>
+<script>
+// ===== 화면 =====
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const STORE = 'avlab.v5';
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const fmtN = (v) => Math.round(v * 10) / 10;
+  const isNum = (v) => v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v));
+
+  const state = {
+    design: defaultDesign(), scen: 1, traffic: 2, seed: 19, speed: 1, running: false, pauseOnCrash: true,
+    rows: [], world: null, acc: 0, last: 0, lastUi: 0, nextRow: 1, seenInc: 0, added: false, showAll: false, detailOpen: false
+  };
+
+  // ---------- 이 브라우저에 저장 ----------
+  function persist() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({ design: state.design, rows: state.rows, nextRow: state.nextRow,
+        scen: state.scen, traffic: state.traffic, seed: state.seed, speed: state.speed }));
+    } catch (e) { /* 저장 불가 */ }
+  }
+  function restore() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE) || 'null');
+      if (!s) return;
+      const d = normalizeDesign(s.design);
+      if (d) state.design = d;
+      if (Array.isArray(s.rows)) state.rows = s.rows;
+      state.nextRow = s.nextRow || state.rows.length + 1;
+      if ([1, 2, 4, 8].includes(s.speed)) state.speed = s.speed;
+    } catch (e) { /* 무시 */ }
+  }
+
+  // ---------- 설계 파일 검사(옛 형식도 받아들임) ----------
+  function normalizeDesign(d) {
+    if (!d || typeof d !== 'object') return null;
+    const base = defaultDesign();
+    const oldP = d.params || {};
+    const oldRef = { safe: oldP.safe ?? 30, ttc: oldP.ttc ?? 2.5, lcFront: oldP.lcFront ?? 35, lcRear: oldP.lcRear ?? 15, target: oldP.target ?? 110 };
+    const tgt = Number(oldP.target);
+    const out = { name: typeof d.name === 'string' && d.name.trim() ? d.name.slice(0, 40) : '불러온 알고리즘',
+      params: { target: Number.isFinite(tgt) ? tgt : base.params.target }, rules: [], lane: {} };
+    if (!Array.isArray(d.rules) || !d.rules.length) return null;
+    const L0 = d.lane || {};
+    for (const r0 of d.rules.slice(0, 20)) {
+      let r = r0;
+      if (r && r.act === 'check') { // 예전 '양쪽 차선 확인' 규칙은 왼쪽 변경 + 여유 조건으로 바꿔 불러옴
+        r = { ...r, act: 'left', join: 'and', conds: (r.conds || []).concat([{ v: 'lf', op: '≥', n: L0.front ?? oldP.lcFront ?? null }, { v: 'lr', op: '≥', n: L0.rear ?? oldP.lcRear ?? null }]) };
+      }
+      if (!r || !ACTIONS[r.act] || !Array.isArray(r.conds)) return null;
+      const conds = r.conds.slice(0, 8).map((c) => {
+        const v = VARS[c.v] ? c.v : 'always';
+        let n = c.ref && oldRef[c.ref] !== undefined ? oldRef[c.ref] : c.n;
+        n = isNum(n) ? Number(n) : null;
+        return { v, op: OPS.includes(c.op) ? c.op : '<', mode: c.mode === 'time' && M_VARS.includes(v) ? 'time' : 'num', n };
+      });
+      if (!conds.length) conds.push({ v: 'always', op: '<', mode: 'num', n: 0 });
+      out.rules.push({ join: r.join === 'or' ? 'or' : 'and', conds, act: r.act, why: typeof r.why === 'string' ? r.why.slice(0, 120) : '' });
+    }
+    out.lane = {};
+    return out;
+  }
+
+  // ---------- 월드 ----------
+  function newWorld() {
+    state.world = createWorld(state.design, state.scen, state.traffic, state.seed);
+    state.world.lastSens = sense(state.world);
+    state.running = false; state.acc = 0; state.seenInc = 0; state.added = false; state.detailOpen = false;
+    $('#incFold').open = false;
+    $('#goal').textContent = '목표: ' + SCENARIOS[state.scen].goal;
+    updateTransport(); updateLive(); renderIncidents(); renderRows();
+  }
+  function setDesign(d) {
+    state.design = d;
+    if (state.world) state.world.design = d;
+    markModified(); renderDesign(); persist(); updateLive();
+  }
+  function markModified() {
+    const w = state.world;
+    if (w && w.t > 0 && !w.finished) w.modified = true;
+  }
+
+  // ---------- 실험 조건 ----------
+  function initControls() {
+    state.scen = 1;
+    $('#segs').innerHTML = SCENARIOS[1].segments.map((s, i) => `<span data-seg="${i}" title="${s.t0}~${s.t1}초">${s.t0}~${s.t1}초 ${esc(s.label)}</span>`).join('');
+    $('#track').insertAdjacentHTML('beforeend', SCENARIOS[1].segments.slice(1).map((s) => `<i class="tick" style="left:${(s.t0 / SIM_T * 100).toFixed(2)}%"></i>`).join(''));
+    const sp = $('#speeds');
+    sp.innerHTML = [1, 2, 4, 8].map((v) => `<button type="button" data-v="${v}">${v}×</button>`).join('');
+    sp.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      state.speed = Number(b.dataset.v); persist(); syncSeg();
+    });
+    syncSeg();
+    $('#run').addEventListener('click', toggleRun);
+    $('#reset').addEventListener('click', newWorld);
+    $('#pauseCrash').addEventListener('change', (e) => { state.pauseOnCrash = e.target.checked; });
+    document.addEventListener('keydown', (e) => {
+      if (e.code !== 'Space') return;
+      const t = e.target;
+      if (t && t.closest && t.closest('input, select, textarea, button')) return;
+      e.preventDefault(); toggleRun();
+    });
+  }
+  function syncSeg() {
+    document.querySelectorAll('#speeds button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === state.speed)));
+  }
+  function toggleRun() {
+    if (!state.running) {
+      const bl = designBlanks(state.design);
+      if (bl.rules.length || bl.lane) {
+        const where = '규칙 ' + bl.rules.map((i) => i + 1).join(', ');
+        toast(where + '의 빈칸(?)을 채워야 주행할 수 있어요');
+        renderDesign();
+        const first = document.querySelector('#design input.empty');
+        if (first) first.focus();
+        return;
+      }
+      if (state.world.finished) newWorld();
+    }
+    state.running = !state.running; state.acc = 0;
+    if (!state.running) state.detailOpen = true;
+    updateTransport(); updateLive();
+  }
+  function updateTransport() {
+    const w = state.world;
+    const b = $('#run');
+    b.textContent = state.running ? '❚❚ 일시정지' : (w.t > 0 && !w.finished ? '▶ 계속 주행' : w.finished ? '▶ 다시 주행' : '▶ 주행');
+    $('#endnote').hidden = !w.finished;
+    $('#addRow').disabled = !(w.t > 0) || state.added;
+    $('#addRow').textContent = state.added ? '비교표에 추가됨' : '현재 결과 비교표에 추가';
+    $('#addRow2').disabled = state.added;
+    $('#addRow2').textContent = state.added ? '비교표에 추가됨' : '비교표에 추가';
+    const showDetail = !state.running && w.t > 0 && state.detailOpen;
+    $('#detail').hidden = !showDetail;
+    $('#showDetail').hidden = showDetail;
+    $('#peek').hidden = !state.running && w.t > 0 || w.finished;
+  }
+
+  // ---------- 설계 화면 ----------
+  function nInput(attrs, val, label) {
+    const empty = !isNum(val);
+    return `<input type="number" step="any" ${attrs} value="${empty ? '' : val}" placeholder="?" aria-label="${esc(label)}" class="${empty ? 'empty' : ''}">`;
+  }
+  function condHTML(i, j, c, n) {
+    const varOpts = Object.keys(VARS).map((k) => `<option value="${k}"${c.v === k ? ' selected' : ''}>${esc(VARS[k].label)}</option>`).join('');
+    const del = n > 1 ? `<button class="icon-btn" data-cmd="delCond" data-r="${i}" data-c="${j}" aria-label="조건 삭제" title="조건 삭제">✕</button>` : '';
+    if (c.v === 'always') {
+      return `<div class="cond"><div class="line"><select class="var" data-r="${i}" data-c="${j}" data-f="v" aria-label="판단 변수">${varOpts}</select>${del}</div></div>`;
+    }
+    const ops = OPS.map((o) => `<option${c.op === o ? ' selected' : ''}>${o}</option>`).join('');
+    const isM = M_VARS.includes(c.v);
+    const modeSel = isM ? `<select data-r="${i}" data-c="${j}" data-f="mode" aria-label="오른쪽 값 종류">
+        <option value="num"${c.mode !== 'time' ? ' selected' : ''}>숫자</option>
+        <option value="time"${c.mode === 'time' ? ' selected' : ''}>내 속도 ×</option></select>` : '';
+    const time = isM && c.mode === 'time';
+    const unit = time ? '초 동안 가는 거리' : VARS[c.v].unit;
+    let hint = VAR_HINT[c.v] || '';
+    if (time) {
+      const tv = state.design.params.target;
+      hint = isNum(c.n) ? `예: 내 속도가 ${tv} km/h면 ${fmtN(c.n)}초 × ${fmtN(tv / 3.6)} m/s = 약 ${Math.round(tv / 3.6 * c.n)} m` : '몇 초 동안 가는 거리로 할지 정하세요. 속도가 빠를수록 기준 거리도 길어져요';
+    }
+    return `<div class="cond"><div class="line">
+      <select class="var" data-r="${i}" data-c="${j}" data-f="v" aria-label="판단 변수">${varOpts}</select>
+      <select data-r="${i}" data-c="${j}" data-f="op" aria-label="비교">${ops}</select>
+      ${modeSel}
+      ${nInput(`data-r="${i}" data-c="${j}" data-f="n" id="n-${i}-${j}"`, c.n, '기준값 직접 입력')}
+      <span class="unit-t">${esc(unit)}</span>${del}</div>
+      <p class="vh">${esc(hint)}</p></div>`;
+  }
+  const isElse = (r) => r.conds.length === 1 && r.conds[0].v === 'always';
+  const kwOf = (r, i) => (i === 0 ? 'IF' : isElse(r) ? 'ELSE' : 'ELSE IF');
+  function codeHTML() {
+    const D = state.design;
+    let dead = false; const out = [];
+    D.rules.forEach((r, i) => {
+      const kw = kwOf(r, i);
+      const cond = isElse(r) ? (i === 0 ? '항상' : '') : r.conds.map((c) => esc(condTxt(c))).join(r.join === 'and' ? ' <span class="k">AND</span> ' : ' <span class="k">OR</span> ');
+      const body = kw === 'ELSE'
+        ? `<span class="k">ELSE</span>\n    <span class="a">${esc(ACTIONS[r.act])}</span>`
+        : `<span class="k">${kw}</span> ${cond}\n    <span class="k">THEN</span> <span class="a">${esc(ACTIONS[r.act])}</span>`;
+      out.push(`<span class="ln${dead ? ' dead' : ''}" data-code="${i}">${body}${dead ? '   <span class="x">// 위의 ELSE 때문에 검사되지 않음</span>' : ''}</span>`);
+      if (r.conds.some((c) => c.v === 'always') && (r.join !== 'and' || r.conds.length === 1)) dead = true;
+    });
+    if (!dead) out.push('<span class="ln"><span class="x">// 어느 조건도 참이 아니면: 현재 속도 유지</span></span>');
+    return out.join('');
+  }
+  function renderCode() { const el = $('#code'); if (el) { el.innerHTML = codeHTML(); updateFiring(); } }
+  function laneHelp(r, i) {
+    if (r.act !== 'left' && r.act !== 'right') return '';
+    const side = r.act === 'left' ? 'l' : 'r', name = r.act === 'left' ? '왼쪽' : '오른쪽';
+    const has = r.conds.some((c) => c.v === side + 'f') && r.conds.some((c) => c.v === side + 'r');
+    if (has) return '';
+    return `<p class="warnline">이 행동은 옆 차선이 비었는지 확인하지 않고 바로 바꿔요. 안전하게 바꾸려면 ‘${name} 차선 앞·뒤 여유’ 조건이 필요해요.</p>
+      <div><button class="btn small" data-cmd="addLane" data-r="${i}" data-side="${side}">+ ${name} 차선 앞·뒤 여유 조건 넣기</button></div>`;
+  }
+  function renderDesign() {
+    const D = state.design, N = D.rules.length;
+    const blanks = designBlanks(D);
+    const rules = D.rules.map((r, i) => {
+      const conds = r.conds.map((c, j) => condHTML(i, j, c, r.conds.length)).join('');
+      const acts = Object.keys(ACTIONS).map((k) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${esc(ACTIONS[k])}</option>`).join('');
+      const extra = laneHelp(r, i);
+      const isBlank = blanks.rules.includes(i);
+      const kw = kwOf(r, i);
+      return `<div class="rule${isBlank ? ' blank' : ''}" data-rulecard="${i}">
+        <div class="rh">
+          <span class="no">규칙 ${i + 1}<span class="live">실행 중</span></span>
+          <span>
+            <button class="icon-btn" data-cmd="up" data-r="${i}" ${i === 0 ? 'disabled' : ''} aria-label="규칙 ${i + 1} 위로" title="위로">▲</button>
+            <button class="icon-btn" data-cmd="down" data-r="${i}" ${i === N - 1 ? 'disabled' : ''} aria-label="규칙 ${i + 1} 아래로" title="아래로">▼</button>
+            <button class="icon-btn" data-cmd="delRule" data-r="${i}" ${N <= 1 ? 'disabled' : ''} aria-label="규칙 ${i + 1} 삭제" title="삭제">✕</button>
+          </span>
+        </div>
+        <div class="joinrow"><span class="kw">${kw}</span>
+          ${r.conds.length > 1 ? `<select data-r="${i}" data-f="join" aria-label="조건 결합"><option value="and"${r.join === 'and' ? ' selected' : ''}>AND · 아래 조건을 모두 만족하면</option><option value="or"${r.join === 'or' ? ' selected' : ''}>OR · 아래 조건 중 하나라도 만족하면</option></select>` : kw === 'ELSE' ? '<span>위의 조건이 모두 거짓이면</span>' : ''}
+        </div>
+        ${conds}
+        <div><button class="btn small ghost" data-cmd="addCond" data-r="${i}" ${r.conds.length >= 8 ? 'disabled' : ''}>+ 조건 추가</button></div>
+        <div class="then"><span class="kw">THEN</span><select data-r="${i}" data-f="act" aria-label="행동">${acts}</select></div>
+        ${extra}
+        <div class="why"><label for="why-${i}">왜 이렇게 정했나요?</label>
+          <input type="text" id="why-${i}" data-r="${i}" data-f="why" maxlength="120" value="${esc(r.why)}" placeholder="예: 110 km/h면 1초에 약 30 m를 가니까, 2초 거리인 60 m는 떨어져 있어야 한다"></div>
+        ${isBlank ? '<p class="errline">빈칸(?)에 숫자를 넣어야 주행할 수 있어요.</p>' : ''}
+      </div>`;
+    }).join('');
+    const hasElse = D.rules.some((r) => r.conds.some((c) => c.v === 'always'));
+    const lastElse = D.rules[N - 1].conds.some((c) => c.v === 'always');
+    let warn = '';
+    if (!hasElse) warn = '<p class="warnline">어느 규칙도 참이 아니면 현재 속도를 그대로 유지해요. 마지막에 ‘항상’ 규칙을 두면 그 외 상황의 행동을 정할 수 있어요.</p>';
+    else if (!lastElse) warn = '<p class="warnline">‘항상’(ELSE) 규칙은 언제나 참이라서, 그 아래 규칙은 검사되지 않아요.</p>';
+    if (N < 4) warn += '<p class="warnline">규칙을 4개 이상 만들어 보세요.</p>';
+
+    $('#design').innerHTML = `
+      <div class="panel design-head">
+        <header><h2>알고리즘 설계</h2>
+          <div class="row">
+            <button class="btn small" data-cmd="saveJson">JSON 저장</button>
+            <button class="btn small" data-cmd="loadJson">JSON 불러오기</button>
+            <button class="btn small ghost" data-cmd="resetDesign">기본 알고리즘으로</button>
+          </div>
+        </header>
+        <div class="field"><label class="label" for="dname">설계 이름</label>
+          <input type="text" id="dname" value="${esc(D.name)}" maxlength="40" data-f="name"></div>
+        <div class="target"><label for="p-target">목표 속도 <span class="hint">도로가 비었을 때 달리고 싶은 속도</span></label>
+          <span class="unit">${nInput('data-p="target" id="p-target" min="40" max="140" step="5"', D.params.target, '목표 속도')} km/h</span></div>
+        <p class="hint">바꾼 내용은 바로 적용돼요. 주행 중에 바꾸면 비교표에 ‘실험 중 수정’으로 표시돼요.</p>
+      </div>
+      <div class="panel">
+        <header><h2>판단 규칙 <small>IF · ELSE IF · ELSE</small></h2></header>
+        <p class="hint">기본 알고리즘에는 일부러 문제를 넣어 두었어요. 먼저 그대로 달려 보고, 어떤 규칙이 왜 문제인지 찾아 고치세요. 위에서부터 차례로 검사해 처음 참이 된 규칙의 THEN 하나만 실행해요.</p>
+        <div class="field"><span class="label">지금 알고리즘 전체 보기</span><pre class="code" id="code" aria-label="IF ELSE IF ELSE로 쓴 전체 알고리즘"></pre></div>
+        <div class="rules">${rules}</div>
+        ${warn}
+        <div><button class="btn" data-cmd="addRule">+ 규칙 추가</button></div>
+      </div>`;
+    renderCode();
+  }
+
+  function readNum(t) { return t.value === '' ? null : (Number.isFinite(Number(t.value)) ? Number(t.value) : null); }
+  function onDesignInput(e) {
+    const t = e.target, D = state.design;
+    const commit = e.type === 'change';
+    if (t.dataset.f === 'name') { D.name = t.value.slice(0, 40); persist(); return; }
+    if (t.dataset.p) {
+      const v = readNum(t);
+      D.params[t.dataset.p] = v === null ? D.params[t.dataset.p] : v;
+      t.classList.toggle('empty', v === null);
+      markModified(); persist(); if (commit) renderDesign(); updateLive(); return;
+    }
+    if (t.dataset.l) {
+      const k = t.dataset.l;
+      if (k === 'front' || k === 'rear') { D.lane[k] = readNum(t); t.classList.toggle('empty', D.lane[k] === null); }
+      else if (k === 'cooldown') { const v = readNum(t); D.lane.cooldown = v === null ? 0 : Math.max(0, v); }
+      else D.lane[k] = t.value;
+      markModified(); persist(); if (commit) renderDesign(); updateLive(); return;
+    }
+    if (t.dataset.r === undefined) return;
+    const r = D.rules[Number(t.dataset.r)]; if (!r) return;
+    const f = t.dataset.f;
+    if (f === 'why') { r.why = t.value.slice(0, 120); persist(); return; }
+    if (f === 'act') { if (r.act !== t.value) { r.act = t.value; markModified(); persist(); renderDesign(); updateLive(); } return; }
+    if (f === 'join') { r.join = t.value; markModified(); persist(); renderCode(); updateLive(); return; }
+    const c = r.conds[Number(t.dataset.c)]; if (!c) return;
+    if (f === 'v') {
+      if (c.v === t.value) return;
+      c.v = t.value;
+      if (!M_VARS.includes(c.v)) c.mode = 'num';
+      c.n = null; // 변수를 바꾸면 기준값은 새로 생각하도록 비움
+      markModified(); persist(); renderDesign(); updateLive(); return;
+    }
+    if (f === 'mode') { if (c.mode !== t.value) { c.mode = t.value; c.n = null; markModified(); persist(); renderDesign(); updateLive(); } return; }
+    if (f === 'op') c.op = t.value;
+    else if (f === 'n') { c.n = readNum(t); t.classList.toggle('empty', c.n === null); if (commit) { renderDesign(); } }
+    markModified(); persist(); renderCode(); updateLive();
+  }
+  function onDesignClick(e) {
+    const b = e.target.closest('[data-cmd]'); if (!b) return;
+    const D = state.design, i = Number(b.dataset.r), cmd = b.dataset.cmd;
+    if (cmd === 'up' && i > 0) [D.rules[i - 1], D.rules[i]] = [D.rules[i], D.rules[i - 1]];
+    else if (cmd === 'down' && i < D.rules.length - 1) [D.rules[i + 1], D.rules[i]] = [D.rules[i], D.rules[i + 1]];
+    else if (cmd === 'delRule' && D.rules.length > 1) { if (!armed(b, '삭제?')) return; D.rules.splice(i, 1); toast('규칙 ' + (i + 1) + '을 삭제했어요'); }
+    else if (cmd === 'addRule') D.rules.push({ join: 'and', conds: [{ v: 'gap', op: '<', mode: 'num', n: null }], act: 'soft', why: '' });
+    else if (cmd === 'addCond') D.rules[i].conds.push({ v: 'speed', op: '>', mode: 'num', n: null });
+    else if (cmd === 'delCond') D.rules[i].conds.splice(Number(b.dataset.c), 1);
+    else if (cmd === 'addLane') {
+      const r = D.rules[i], sd = b.dataset.side;
+      r.conds = r.conds.filter((c) => c.v !== 'always');
+      if (!r.conds.some((c) => c.v === sd + 'f')) r.conds.push({ v: sd + 'f', op: '≥', mode: 'num', n: null });
+      if (!r.conds.some((c) => c.v === sd + 'r')) r.conds.push({ v: sd + 'r', op: '≥', mode: 'num', n: null });
+      r.join = 'and';
+    }
+    else if (cmd === 'saveJson') { saveJson(); return; }
+    else if (cmd === 'loadJson') { openLoad(); return; }
+    else if (cmd === 'resetDesign') {
+      if (!armed(b, '한 번 더 누르면 되돌려요')) return;
+      setDesign(defaultDesign()); toast('기본 알고리즘으로 되돌렸어요'); return;
+    } else if (cmd === 'emptyDesign') {
+      if (!armed(b, '한 번 더 누르면 비워요')) return;
+      setDesign(emptyDesign()); toast('빈 설계로 시작해요. 규칙을 추가해 보세요'); return;
+    } else return;
+    markModified(); persist(); renderDesign(); updateLive();
+  }
+  function armed(b, msg) {
+    if (b.dataset.armed === '1') { b.dataset.armed = ''; b.classList.remove('armed'); return true; }
+    const orig = b.textContent;
+    b.dataset.armed = '1'; b.classList.add('armed'); b.textContent = msg;
+    setTimeout(() => { if (b.isConnected && b.dataset.armed === '1') { b.dataset.armed = ''; b.classList.remove('armed'); b.textContent = orig; } }, 3000);
+    return false;
+  }
+
+  // ---------- 파일 ----------
+  let downloads = null;
+  (async () => { try { downloads = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (e) { downloads = null; } })();
+  async function exportText(filename, text, what) {
+    if (downloads) {
+      try { await downloads.save({ filename, data: text }); toast(what + ' 파일을 저장했어요'); return; }
+      catch (err) {
+        if (err && err.code === 'declined') return;
+        if (err && err.code === 'rate_limited') { toast('저장 창이 이미 열려 있어요'); return; }
+      }
+    }
+    // 아티팩트 밖(파일로 직접 열거나 웹에 올린 경우)에서는 브라우저 내려받기로 저장
+    let standalone = false;
+    try { standalone = window.self === window.top; } catch (e) { standalone = false; }
+    if (standalone) {
+      try {
+        const type = filename.endsWith('.csv') ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8';
+        const url = URL.createObjectURL(new Blob([text], { type }));
+        const a = document.createElement('a'); a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        toast(what + ' 파일을 내려받았어요'); return;
+      } catch (e) { /* 아래 복사 창으로 */ }
+    }
+    openDialog({ title: what + ' 내용 복사', text: '이 화면에서는 파일로 바로 저장할 수 없어요. 아래 내용을 복사해서 메모장이나 스프레드시트에 붙여 넣으세요.', value: text, mode: 'copy' });
+  }
+  const fileSafe = (s) => (s || '알고리즘').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+  function saveJson() {
+    const D = state.design;
+    exportText(fileSafe(D.name) + '.json', JSON.stringify({ format: '자율주행 알고리즘 연구실', version: 2, ...D }, null, 2), 'JSON');
+  }
+  function openLoad() { openDialog({ title: 'JSON 불러오기', text: '저장해 둔 알고리즘 파일을 고르거나, 파일 내용을 아래에 붙여 넣고 ‘적용’을 누르세요.', value: '', mode: 'load' }); }
+  function openDialog({ title, text, value, mode }) {
+    $('#dlg-title').textContent = title; $('#dlg-text').textContent = text;
+    const area = $('#dlg-area'); area.value = value; area.readOnly = mode === 'copy';
+    $('#dlg-err').hidden = true;
+    $('#dlg-copy').hidden = mode !== 'copy';
+    $('#dlg-ok').hidden = mode !== 'load';
+    const file = $('#dlg-file'); file.hidden = mode !== 'load'; file.value = '';
+    $('#dlg').hidden = false;
+    (mode === 'load' ? file : area).focus();
+    if (mode === 'copy') area.select();
+  }
+  function closeDialog() { $('#dlg').hidden = true; }
+  function initDialog() {
+    $('#dlg-close').addEventListener('click', closeDialog);
+    $('#dlg').addEventListener('click', (e) => { if (e.target.id === 'dlg') closeDialog(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#dlg').hidden) closeDialog(); });
+    $('#dlg-copy').addEventListener('click', () => {
+      const area = $('#dlg-area');
+      const fallback = () => { area.select(); toast('선택된 내용을 Ctrl+C로 복사하세요'); };
+      try { navigator.clipboard.writeText(area.value).then(() => toast('복사했어요'), fallback); } catch (e) { fallback(); }
+    });
+    $('#dlg-file').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => { $('#dlg-area').value = String(rd.result || ''); applyLoad(); };
+      rd.readAsText(f);
+    });
+    $('#dlg-ok').addEventListener('click', applyLoad);
+  }
+  function applyLoad() {
+    let d = null;
+    try { d = normalizeDesign(JSON.parse($('#dlg-area').value)); } catch (e) { d = null; }
+    if (!d) { const err = $('#dlg-err'); err.hidden = false; err.textContent = '알고리즘 파일로 읽을 수 없어요. 이 연구실에서 ‘JSON 저장’으로 만든 파일인지 확인하세요.'; return; }
+    closeDialog(); setDesign(d); toast('‘' + d.name + '’을 불러왔어요');
+  }
+  let toastTimer = 0;
+  function toast(msg) {
+    const t = $('#toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+
+  // ---------- 판단 표시 ----------
+  function fmtVal(k, v) {
+    if (k === 'ttc') return v >= 999 ? '없음' : v.toFixed(1);
+    if (k === 'gap') return v >= 999 ? '없음' : String(Math.round(v));
+    if (k === 'lf' || k === 'rf') return v >= SENSOR_F ? SENSOR_F + '+' : String(Math.round(v));
+    if (k === 'lr' || k === 'rr') return v >= SENSOR_R ? SENSOR_R + '+' : String(Math.round(v));
+    return String(Math.round(v));
+  }
+  function updateFiring() {
+    const w = state.world; if (!w) return;
+    const fi = w.lastDec && w.t > 0 ? w.lastDec.rule : -9;
+    document.querySelectorAll('[data-rulecard]').forEach((el) => el.classList.toggle('firing', Number(el.dataset.rulecard) === fi));
+    document.querySelectorAll('[data-code]').forEach((el) => el.classList.toggle('firing', Number(el.dataset.code) === fi));
+  }
+  function updateLive() {
+    const w = state.world; if (!w) return;
+    const s = w.lastSens || sense(w), e = w.ego;
+    const d = w.lastDec;
+    if (d && w.t > 0) {
+      const tag = d.rule >= 0 ? `<span class="rule-tag">규칙 ${d.rule + 1}</span>` : '<span class="rule-tag none">참인 규칙 없음</span>';
+      $('#j-act').innerHTML = `${tag}${esc(ACTIONS[d.shown] || ACTIONS[d.act])}<span class="note">${esc(d.note || (d.rule < 0 ? '현재 속도를 유지해요' : ''))}</span>`;
+    } else {
+      $('#j-act').innerHTML = '<span class="rule-tag none">대기</span>주행을 시작하면 지금 실행 중인 규칙을 보여줘요';
+    }
+    $('#j-nums').innerHTML = `속도 <b>${Math.round(e.v * 3.6)}</b> km/h · 앞차 <b>${s.gap >= 999 ? '없음' : Math.round(s.gap) + '</b> m<b>'}</b> · TTC <b>${s.ttc >= 999 ? '없음' : s.ttc.toFixed(1) + '</b>초<b>'}</b> · <b>${e.lane + 1}</b>차로`;
+    const m = w.metrics;
+    $('#tally').innerHTML = `
+      <span class="chip ${m.collisions ? 'bad' : ''}">충돌 <b>${m.collisions}</b></span>
+      <span class="chip ${m.danger >= 3 ? 'warn' : ''}">위험 시간 <b>${m.danger.toFixed(1)}</b>초</span>
+      <span class="chip ${m.emerg >= 5 ? 'warn' : ''}">급제동 <b>${m.emerg}</b></span>
+      <span class="chip">차선 변경 <b>${m.lc}</b></span>
+      <span class="chip">평균 <b>${m.steps ? Math.round(m.speedSum / m.steps) : 0}</b> km/h</span>`;
+    $('#pfill').style.width = (w.t / SIM_T * 100).toFixed(1) + '%';
+    const segs = SCENARIOS[1].segments;
+    document.querySelectorAll('#segs span').forEach((el, i) => {
+      const s = segs[i];
+      el.classList.toggle('on', w.t > 0 && w.t >= s.t0 && (w.t < s.t1 || (i === segs.length - 1 && w.finished)));
+      el.classList.toggle('hit', w.incidents.some((x) => x.t >= s.t0 && x.t < s.t1));
+    });
+    const tr = $('#track');
+    tr.querySelectorAll('.boom').forEach((b) => b.remove());
+    tr.insertAdjacentHTML('beforeend', w.incidents.map((x) => `<i class="boom" style="left:${(x.t / SIM_T * 100).toFixed(2)}%" title="${x.t.toFixed(1)}초 충돌"></i>`).join(''));
+    $('#ptext').textContent = w.t.toFixed(1) + ' / ' + SIM_T + '초';
+    updateFiring();
+    if (!state.running && w.t > 0) renderDetail();
+    if (w.incidents.length !== state.seenInc) renderIncidents();
+  }
+  function renderDetail() {
+    const w = state.world, s = w.lastSens || sense(w), D = state.design;
+    $('#d-time').textContent = w.t.toFixed(1) + '초 시점';
+    const sideHTML = (name, g, f, r) => {
+      if (!g.valid) return `<div class="side none"><div class="h">${name}<em>차로 없음</em></div><div><span>도로 끝이라 갈 수 없어요 (여유 0 m)</span></div></div>`;
+      return `<div class="side"><div class="h">${name}</div>
+        <div><span>앞 여유</span><span class="num">${fmtVal(f, g.front)} m</span></div>
+        <div><span>뒤 여유</span><span class="num">${fmtVal(r, g.rear)} m</span></div></div>`;
+    };
+    $('#sides').innerHTML = sideHTML('왼쪽 차선', s.lg, 'lf', 'lr') + sideHTML('오른쪽 차선', s.rg, 'rf', 'rr')
+      + `<div class="side"><div class="h">차선 변경 후 지난 시간</div><div><span>${s.since >= 99 ? '아직 바꾼 적 없음 (99로 계산)' : '마지막으로 바꾼 뒤'}</span><span class="num">${s.since >= 99 ? '99' : s.since.toFixed(1)} 초</span></div></div>`;
+    let fired = -1;
+    const evs = D.rules.map((r) => evalRule(r, s, D.params));
+    const trueIdx = evs.map((ev, i) => (ev.ok ? i : -1)).filter((i) => i >= 0);
+    const parts = D.rules.map((r, i) => {
+      const ev = evs[i];
+      const after = fired >= 0;          // 위에서 이미 실행된 규칙이 있음
+      if (!after && ev.ok) fired = i;
+      const isFire = !after && ev.ok;
+      const blocked = after && ev.ok;    // 참이지만 우선순위에 밀림
+      const cls = isFire ? 'fire' : blocked ? 'blocked' : after ? 'skip' : '';
+      const res = isFire ? '참 → THEN ' + ACTIONS[r.act] + ' 실행'
+        : blocked ? `참이었지만 실행 안 됨 · 규칙 ${fired + 1}이 먼저`
+        : after ? '거짓 (실제로는 검사하지 않음)' : '거짓 → 다음 규칙 검사';
+      const lines = r.conds.map((c, j) => {
+        if (c.v === 'always') return `<div class="c"><span>${i === 0 ? '항상' : after ? 'ELSE · 따로 실행했다면 ‘항상’이라 참' : 'ELSE · 위 규칙이 모두 거짓일 때만'}</span><span class="mk-ok">✓</span></div>`;
+        const x = ev.evals[j];
+        const thTxt = !Number.isFinite(x.th) ? '?' : c.mode === 'time' && M_VARS.includes(c.v) ? `내 속도×${fmtN(c.n)}초(${Math.round(x.th)}m)` : fmtN(x.th) + ' ' + VARS[c.v].unit;
+        return `<div class="c"><span>${esc(VARS[c.v].label)} <b class="num">${fmtVal(c.v, x.val)}</b> ${c.op} ${esc(thTxt)}</span><span class="${x.ok ? 'mk-ok' : 'mk-no'}">${x.ok ? '✓' : '✗'}</span></div>`;
+      }).join('');
+      const joinTxt = r.conds.length > 1 ? `<div class="c"><span>${r.join === 'and' ? 'AND · 모두 만족해야 참' : 'OR · 하나만 만족해도 참'}</span></div>` : '';
+      return `<div class="chk ${cls}"><div class="h"><span>규칙 ${i + 1} · ${kwOf(r, i)}</span><span class="res">${esc(res)}</span></div>${lines}${joinTxt}</div>`;
+    });
+    if (fired < 0) parts.push('<div class="chk fire"><div class="h"><span>참인 규칙 없음</span><span class="res">현재 속도 유지</span></div></div>');
+    const names = trueIdx.map((i) => '규칙 ' + (i + 1)).join(', ');
+    let sum;
+    if (trueIdx.length >= 2) sum = `<div class="conflict"><b>지금 동시에 참인 규칙: ${names}</b><span>규칙을 따로따로 실행했다면 ${trueIdx.map((i) => ACTIONS[D.rules[i].act]).join(' · ')}을 한꺼번에 해야 해요. 차는 한순간에 행동을 하나만 할 수 있어서, 순서(우선순위)가 가장 높은 <b>규칙 ${fired + 1}</b>만 실행했어요.</span></div>`;
+    else if (trueIdx.length === 1) sum = `<div class="conflict one"><b>지금 참인 규칙: ${names}</b><span>참인 규칙이 하나뿐이라 우선순위 다툼이 없어요.</span></div>`;
+    else sum = `<div class="conflict one"><b>지금 참인 규칙이 없어요</b><span>그래서 현재 속도를 그대로 유지해요.</span></div>`;
+    parts.unshift(sum);
+    $('#checks').innerHTML = parts.join('');
+    const tt = Math.max(w.t, 1e-9);
+    const keys = D.rules.map((_, i) => i).concat(w.ruleTime[-1] ? [-1] : []);
+    $('#usage').innerHTML = keys.map((i) => {
+      const v = w.ruleTime[i] || 0;
+      return `<div class="u"><span>${i >= 0 ? '규칙 ' + (i + 1) : '규칙 없음'}</span><span class="bar"><i style="width:${(v / tt * 100).toFixed(1)}%"></i></span><span class="num">${v.toFixed(1)}초</span></div>`;
+    }).join('');
+  }
+  function renderIncidents() {
+    const w = state.world;
+    state.seenInc = w.incidents.length;
+    $('#inc-count').textContent = w.incidents.length ? w.incidents.length + '건' : '';
+    if (!w.incidents.length) { $('#incidents').innerHTML = '<p class="empty">이번 주행에서는 아직 충돌이 없어요.</p>'; return; }
+    $('#incidents').innerHTML = w.incidents.slice().reverse().map((inc) => {
+      const rows = inc.log.slice(-8).map((l) => `<tr><td class="num">${l.t.toFixed(1)}</td><td class="num">${Math.round(l.v)}</td><td class="num">${l.gap >= 999 ? '-' : Math.round(l.gap)}</td><td class="num">${l.ttc >= 999 ? '-' : l.ttc.toFixed(1)}</td><td>${l.rule >= 0 ? '규칙 ' + (l.rule + 1) : '-'} · ${esc(ACTIONS[l.act] || '')}</td></tr>`).join('');
+      return `<div class="incident"><div class="h"><span>${esc(inc.type)}</span><span class="num">${inc.t.toFixed(1)}초</span></div>
+        <p><b>${esc(inc.seg || '')} 구간</b>${inc.after ? ` · ‘${esc(inc.after.label)}’ ${inc.after.dt.toFixed(1)}초 후` : ''}</p>
+        <p>내 차 ${Math.round(inc.egoV)} km/h · 상대 차량 ${Math.round(inc.otherV)} km/h · 그때 실행한 규칙: ${inc.rule >= 0 ? '규칙 ' + (inc.rule + 1) : '없음'} (${esc(ACTIONS[inc.act] || '')})</p>
+        <div class="mini"><table><thead><tr><th>시각(초)</th><th>속도</th><th>앞차(m)</th><th>TTC</th><th>판단</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    }).join('');
+  }
+
+  // ---------- 비교표 ----------
+  const METRICS = [
+    { k: 'collisions', fmt: (v) => String(v), better: -1, dfmt: (v) => (v > 0 ? '+' : '') + v },
+    { k: 'danger', fmt: (v) => v.toFixed(1) + '초', better: -1, dfmt: (v) => (v > 0 ? '+' : '') + v.toFixed(1) },
+    { k: 'emerg', fmt: (v) => String(v), better: -1, dfmt: (v) => (v > 0 ? '+' : '') + v },
+    { k: 'lc', fmt: (v) => String(v), better: 0, dfmt: (v) => (v > 0 ? '+' : '') + v },
+    { k: 'avg', fmt: (v) => String(Math.round(v)), better: 1, dfmt: (v) => (v > 0 ? '+' : '') + Math.round(v) }
+  ];
+  const condKey = (r) => r.scen + '|' + r.traffic + '|' + r.seed;
+  const condLabel = (r) => `교통량 ${TRAFFIC[r.traffic].label} · 시드 ${r.seed}`;
+
+  // 설계에서 달라진 점 요약
+  function rightTxt(c) {
+    if (c.v === 'always') return '';
+    if (!isNum(c.n)) return '?';
+    return c.mode === 'time' && M_VARS.includes(c.v) ? `내 속도×${fmtN(c.n)}초` : fmtN(c.n) + VARS[c.v].unit;
+  }
+  const condTxt = (c) => c.v === 'always' ? '항상' : `${VARS[c.v].label} ${c.op} ${rightTxt(c)}`;
+  const ruleKey = (r) => JSON.stringify({ j: r.join, a: r.act, c: r.conds.map((c) => [c.v, c.op, c.v === 'always' ? 0 : c.mode, c.v === 'always' ? 0 : c.n]) });
+  const PREFER = { left: '왼쪽', right: '오른쪽', wider: '더 넓은 쪽' };
+  function diffDesign(a, b) {
+    const out = [];
+    if (!a || !b) return out;
+    if (a.params.target !== b.params.target) out.push(`목표 속도 ${a.params.target}→${b.params.target}km/h`);
+    const ka = a.rules.map(ruleKey), kb = b.rules.map(ruleKey);
+    const sameSet = ka.length === kb.length && ka.slice().sort().join() === kb.slice().sort().join();
+    if (sameSet && ka.join() !== kb.join()) out.push('규칙 순서 변경');
+    else if (!sameSet) {
+      // 같은 규칙끼리 먼저 짝지은 뒤(LCS), 사이에 남은 규칙을 수정·삭제·추가로 나눈다
+      const n1 = ka.length, n2 = kb.length;
+      const L = Array.from({ length: n1 + 1 }, () => new Array(n2 + 1).fill(0));
+      for (let i = n1 - 1; i >= 0; i--) for (let j = n2 - 1; j >= 0; j--)
+        L[i][j] = ka[i] === kb[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+      const pairs = []; let i = 0, j = 0;
+      while (i < n1 && j < n2) {
+        if (ka[i] === kb[j]) { pairs.push([i, j]); i++; j++; }
+        else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++;
+      }
+      pairs.push([n1, n2]);
+      const rtxt = (r) => (r.conds.length === 1 && r.conds[0].v === 'always' ? '항상' : r.conds.map(condTxt).join(r.join === 'and' ? ' AND ' : ' OR ')) + ' → ' + ACTIONS[r.act];
+      let pa = 0, pb = 0;
+      for (const [qa, qb] of pairs) {
+        const ga = [], gb = [];
+        for (let x = pa; x < qa; x++) ga.push(x);
+        for (let y = pb; y < qb; y++) gb.push(y);
+        const m = Math.min(ga.length, gb.length);
+        for (let k = 0; k < m; k++) modRule(a.rules[ga[k]], b.rules[gb[k]], '규칙 ' + (gb[k] + 1), out);
+        for (let k = m; k < ga.length; k++) out.push(`규칙 ${ga[k] + 1} 삭제 (${rtxt(a.rules[ga[k]])})`);
+        for (let k = m; k < gb.length; k++) out.push(`규칙 ${gb[k] + 1} 추가 (${rtxt(b.rules[gb[k]])})`);
+        pa = qa + 1; pb = qb + 1;
+      }
+    }
+    return out;
+  }
+  function modRule(ra, rb, no, out) {
+    const m = Math.min(ra.conds.length, rb.conds.length);
+    for (let j = 0; j < m; j++) {
+      const ca = ra.conds[j], cb = rb.conds[j];
+      if (ca.v !== cb.v) out.push(`${no}: ${condTxt(ca)} → ${condTxt(cb)}`);
+      else if (ca.v !== 'always' && (ca.op !== cb.op || rightTxt(ca) !== rightTxt(cb)))
+        out.push(`${no} ${VARS[cb.v].label}: ${ca.op} ${rightTxt(ca)} → ${cb.op} ${rightTxt(cb)}`);
+    }
+    for (let j = m; j < rb.conds.length; j++) out.push(`${no}: 조건 추가 (${condTxt(rb.conds[j])})`);
+    for (let j = m; j < ra.conds.length; j++) out.push(`${no}: 조건 삭제 (${condTxt(ra.conds[j])})`);
+    if (ra.conds.length > 1 && rb.conds.length > 1 && ra.join !== rb.join) out.push(`${no}: ${ra.join.toUpperCase()} → ${rb.join.toUpperCase()}`);
+    if (ra.act !== rb.act) out.push(`${no} 행동: ${ACTIONS[ra.act]} → ${ACTIONS[rb.act]}`);
+  }
+  function baseOf(r) { return state.rows.find((x) => condKey(x) === condKey(r)); }
+
+  function addRow() {
+    const w = state.world; if (!(w.t > 0) || state.added) return;
+    const s = summary(w), notes = [];
+    if (!w.finished) notes.push('중간 기록');
+    if (w.modified) notes.push('실험 중 수정');
+    state.rows.push({ id: state.nextRow++, name: state.design.name, scen: w.scen, traffic: w.traffic, seed: w.seed,
+      t: s.t, collisions: s.collisions, danger: s.danger, emerg: s.emerg, lc: s.lc, avg: s.avg, dist: s.dist,
+      note: notes.join(', '), design: clone(state.design) });
+    state.added = true;
+    persist(); renderRows(); updateTransport(); toast('비교표에 추가했어요');
+  }
+  function renderRows() {
+    const cur = { scen: state.scen, traffic: state.traffic, seed: state.seed };
+    const curKey = condKey(cur);
+    const rows = state.rows.filter((r) => condKey(r) === curKey);
+    const hidden = state.rows.length - rows.length;
+    $('#cmpCond').textContent = '모든 실험은 같은 조건(종합 주행 · 교통량 보통 · 같은 차량 배치)에서 달려서 그대로 비교할 수 있어요.';
+    const tb = $('#rows');
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td class="l dsg" colspan="8"><span class="empty">아직 기록이 없어요. 기본 알고리즘으로 한 번 달린 뒤 비교표에 추가해 기준 기록을 만드세요.</span></td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map((r) => {
+      const base = baseOf(r), isBase = base === r;
+      let chg;
+      if (isBase) chg = '<span class="chg">기준 실험</span>';
+      else {
+        const list = diffDesign(base.design, r.design);
+        const shown = list.slice(0, 3).join(' · ');
+        chg = list.length ? `<span class="chg" title="${esc(list.join('\n'))}">${esc(shown)}${list.length > 3 ? ` 외 ${list.length - 3}건` : ''}</span>` : '<span class="chg">바꾼 점 없음 (같은 설계로 다시 실행)</span>';
+      }
+      const cells = METRICS.map((m) => {
+        let d = '';
+        if (!isBase) {
+          const diff = r[m.k] - base[m.k];
+          const eps = m.k === 'danger' ? 0.05 : 0.5;
+          const cls = Math.abs(diff) < eps || m.better === 0 ? 'same' : (diff * m.better > 0 ? 'better' : 'worse');
+          d = `<span class="d ${cls}">${Math.abs(diff) < eps ? '±0' : m.dfmt(diff)}</span>`;
+        }
+        return `<td class="num">${m.fmt(r[m.k])}${d}</td>`;
+      }).join('');
+      return `<tr class="${isBase ? 'base' : ''}">
+        <td class="l num">${r.id}</td>
+        <td class="l dsg"><span class="nm">${esc(r.name)}</span>${chg}${r.note ? `<span class="tag">${esc(r.note)}</span>` : ''}</td>
+        ${cells}
+        <td class="l"><div class="acts"><button class="icon-btn" data-row="${r.id}" data-act="del" aria-label="${r.id}번 기록 삭제" title="삭제">✕</button></div></td></tr>`;
+    }).join('');
+  }
+  function initRows() {
+    $('#addRow').addEventListener('click', addRow);
+    $('#addRow2').addEventListener('click', addRow);
+    $('#showDetail').addEventListener('click', () => { state.detailOpen = true; updateTransport(); updateLive(); });
+    $('#rows').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-row]'); if (!b) return;
+      const id = Number(b.dataset.row), r = state.rows.find((x) => x.id === id); if (!r) return;
+      if (b.dataset.act === 'del') { if (!armed(b, '삭제?')) return; state.rows = state.rows.filter((x) => x !== r); persist(); renderRows(); }
+      else if (b.dataset.act === 'load') {
+        const d = normalizeDesign(r.design); if (!d) return;
+        setDesign(d);
+        state.scen = r.scen; state.traffic = r.traffic; state.seed = r.seed;
+        $('#seed').value = r.seed; syncSeg(); persist(); newWorld();
+        toast(r.id + '번 실험의 설계와 조건을 불러왔어요');
+      }
+    });
+    $('#csv').addEventListener('click', () => {
+      if (!state.rows.length) { toast('비교표에 기록이 없어요'); return; }
+      const head = ['번호', '설계 이름', '기준 실험 번호', '바꾼 점', '주행시간(초)', '충돌(회)', '위험시간(초)', '급제동(회)', '차선변경(회)', '평균속도(km/h)', '진행거리(m)', '비고'];
+      const q = (v) => '"' + String(v).replace(/"/g, '""') + '"';
+      const lines = [head.map(q).join(',')].concat(state.rows.map((r) => {
+        const base = baseOf(r);
+        const chg = base === r ? '기준 실험' : (diffDesign(base.design, r.design).join(' / ') || '바꾼 점 없음');
+        return [r.id, r.name, base.id, chg,
+          r.t.toFixed(1), r.collisions, r.danger.toFixed(1), r.emerg, r.lc, Math.round(r.avg), Math.round(r.dist), r.note || ''].map(q).join(',');
+      }));
+      exportText('자율주행_실험결과.csv', '﻿' + lines.join('\r\n'), 'CSV');
+    });
+    $('#clearRows').addEventListener('click', (e) => {
+      if (!state.rows.length) return;
+      if (!armed(e.currentTarget, '한 번 더 누르면 모두 지워요')) return;
+      state.rows = []; persist(); renderRows(); toast('비교표를 비웠어요');
+    });
+  }
+
+  // ---------- 도로 그리기 (밝은 그림, 테마와 무관하게 고정) ----------
+  const cv = $('#cv'), ctx = cv.getContext('2d');
+  let W = 440, H = 560, S = 7, LW = 58, ROADX = (W - LW * NLANES) / 2, EGO_SY = 470;
+  const C = {
+    grass: '#e7f4e4', treeA: '#9cc89b', treeB: '#6aa36d', ruler: '#4c7556', curb: '#c3d0dc',
+    road: '#78869a', dash: '#f4f7fb', edge: '#ffffff', yellow: '#f5c84c',
+    ego: '#ef5350', cars: { c1: '#f6b35a', c2: '#b7a2f3', c3: '#f2d464', c4: '#82d3b5', c5: '#f6a6c1' },
+    stall: '#b7c0cc', wheel: '#2f3b4d', glass: '#dcf1fb', rearGlass: '#bcd9ea', head: '#fff3b0', tail: '#f9c4d0', brake: '#ff3b30',
+    line: '#3b6fd8', ok: '#2fae6e', no: '#e5484d', warn: '#f08c2e', ink: '#1f2a37'
+  };
+  function sizeCanvas() {
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    W = Math.max(300, Math.round(cv.clientWidth || 440));
+    H = Math.max(360, Math.round(cv.clientHeight || 560));
+    LW = Math.max(50, Math.min(86, (W - 150) / NLANES));
+    ROADX = (W - LW * NLANES) / 2;
+    EGO_SY = H - Math.max(70, H * 0.14);
+    S = (EGO_SY - 34) / 64; // 내 차 앞 약 64 m가 보이게
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  const laneX = (x) => ROADX + LW * (x + 0.5);
+  const sy = (y) => EGO_SY - (y - state.world.ego.y) * S;
+  function rr(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+  const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+  function chip(text, x, y, bg, fg, align) {
+    ctx.font = '700 11px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(text).width + 10;
+    const left = align === 'center' ? x - tw / 2 : align === 'right' ? x - tw : x;
+    ctx.fillStyle = bg; rr(left, y - 9, tw, 18, 9); ctx.fill();
+    ctx.fillStyle = fg; ctx.textAlign = 'left'; ctx.fillText(text, left + 5, y + 0.5);
+  }
+  function drawCar(c, isEgo, t) {
+    const x = laneX(c.x), y = sy(c.y), L = c.len * S, Wd = Math.round(LW * (c.truck ? 0.56 : 0.5));
+    if (y + L / 2 < -12 || y - L / 2 > H + 12) return;
+    const body = isEgo ? C.ego : c.color === 'stall' ? C.stall : (C.cars[c.color] || C.cars.c1);
+    ctx.save();
+    ctx.translate(x, y);
+    if (c.lc) { const dir = c.lc.to > c.lc.from ? 1 : -1; const p = Math.min(1, (t - c.lc.t0) / c.lc.dur); ctx.rotate(Math.sin(Math.PI * p) * dir * 0.08); }
+    ctx.fillStyle = 'rgba(40,60,90,0.18)'; rr(-Wd / 2 + 2, -L / 2 + 4, Wd, L, 9); ctx.fill();
+    ctx.fillStyle = C.wheel;
+    rr(-Wd / 2 - 2, -L / 2 + 5, Wd + 4, 8, 3); ctx.fill();
+    rr(-Wd / 2 - 2, L / 2 - 13, Wd + 4, 8, 3); ctx.fill();
+    if (c.truck) {
+      ctx.fillStyle = '#eef3f8'; rr(-Wd / 2, -L / 2 + 16, Wd, L - 16, 4); ctx.fill();
+      ctx.strokeStyle = '#c4cfdb'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = body; rr(-Wd / 2, -L / 2, Wd, 18, 7); ctx.fill();
+      ctx.fillStyle = C.glass; rr(-Wd / 2 + 4, -L / 2 + 4, Wd - 8, 7, 3); ctx.fill();
+    } else {
+      ctx.fillStyle = body; rr(-Wd / 2, -L / 2, Wd, L, 10); ctx.fill();
+      ctx.fillStyle = C.glass; rr(-Wd / 2 + 4, -L / 2 + 7, Wd - 8, 8, 4); ctx.fill();
+      ctx.fillStyle = C.rearGlass; rr(-Wd / 2 + 5, L / 2 - 10, Wd - 10, 5, 2.5); ctx.fill();
+    }
+    ctx.fillStyle = C.head;
+    ctx.beginPath(); ctx.arc(-Wd / 2 + 5, -L / 2 + 3.5, 2.6, 0, 7); ctx.arc(Wd / 2 - 5, -L / 2 + 3.5, 2.6, 0, 7); ctx.fill();
+    const braking = isEgo ? c.a < -1.5 : c.acc < -1.5;
+    if (braking) { ctx.fillStyle = 'rgba(255,59,48,0.28)'; rr(-Wd / 2, L / 2 - 2, Wd, 9, 4); ctx.fill(); }
+    ctx.fillStyle = braking ? C.brake : C.tail;
+    ctx.beginPath(); ctx.ellipse(-Wd / 2 + 5, L / 2 - 2.5, 3.2, 2, 0, 0, 7); ctx.ellipse(Wd / 2 - 5, L / 2 - 2.5, 3.2, 2, 0, 0, 7); ctx.fill();
+    const blink = Math.floor(t * 3) % 2 === 0;
+    if ((c.hazard || c.lc) && blink) {
+      ctx.fillStyle = '#ffae1a';
+      const sides = c.hazard ? [-1, 1] : [c.lc.to > c.lc.from ? 1 : -1];
+      for (const sd of sides) {
+        const sx = sd < 0 ? -Wd / 2 - 3 : Wd / 2 - 1;
+        ctx.fillRect(sx, -L / 2 + 1, 4, 4); ctx.fillRect(sx, L / 2 - 6, 4, 4);
+      }
+    }
+    if (isEgo) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; rr(-Wd / 2 - 1.5, -L / 2 - 1.5, Wd + 3, L + 3, 11); ctx.stroke(); }
+    ctx.restore();
+    if (c.hazard) {
+      const ty = y + L / 2 + 24;
+      ctx.fillStyle = C.no; ctx.beginPath(); ctx.moveTo(x, ty - 8); ctx.lineTo(x + 8, ty + 6); ctx.lineTo(x - 8, ty + 6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x, ty - 3); ctx.lineTo(x + 4, ty + 4); ctx.lineTo(x - 4, ty + 4); ctx.closePath(); ctx.fill();
+    }
+  }
+  function draw() {
+    const w = state.world; if (!w) return;
+    const e = w.ego, s = w.lastSens, t = w.t, D = w.design;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = C.grass; ctx.fillRect(0, 0, W, H);
+    // 가로수
+    const tStart = Math.floor((e.y - 20) / 18) * 18;
+    for (let yy = tStart; yy < e.y + 90; yy += 18) {
+      const ty = sy(yy);
+      const tl = Math.max(16, ROADX - 80);
+      for (const tx of [tl, W - tl]) {
+        ctx.fillStyle = C.treeA; ctx.beginPath(); ctx.arc(tx, ty, 13, 0, 7); ctx.fill();
+        ctx.fillStyle = C.treeB; ctx.beginPath(); ctx.arc(tx - 3, ty - 3, 8, 0, 7); ctx.fill();
+      }
+    }
+    ctx.fillStyle = C.curb; ctx.fillRect(ROADX - 10, 0, LW * NLANES + 20, H);
+    ctx.fillStyle = C.road; ctx.fillRect(ROADX - 4, 0, LW * NLANES + 8, H);
+    ctx.fillStyle = C.yellow; ctx.fillRect(ROADX - 2, 0, 4, H);
+    ctx.fillStyle = C.edge; ctx.fillRect(ROADX + LW * NLANES - 2, 0, 4, H);
+    ctx.fillStyle = C.dash;
+    const start = Math.floor((e.y - 25) / 20) * 20;
+    for (let k = 1; k < NLANES; k++) {
+      const x = ROADX + LW * k - 1.5;
+      for (let yy = start; yy < e.y + 100; yy += 20) { const a = sy(yy + 8), b = sy(yy); ctx.fillRect(x, a, 3, b - a); }
+    }
+    // 거리 눈금
+    const front = e.y + e.len / 2;
+    ctx.font = '600 10px "IBM Plex Mono", ui-monospace, monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let dd = 10; dd <= 60; dd += 10) {
+      const y = sy(front + dd);
+      ctx.fillStyle = C.ruler; ctx.fillRect(ROADX - 22, y, 9, 1.5);
+      ctx.fillText(dd + 'm', ROADX - 25, y);
+    }
+    ctx.font = '700 11px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; ctx.textAlign = 'left';
+    ctx.fillStyle = C.ruler; ctx.textAlign = 'right'; ctx.fillText('↑ 진행 방향', W - 10, 16);
+    // 규칙에 쓴 앞차 거리 기준선
+    const egoX = laneX(e.x);
+    const lines = [];
+    D.rules.forEach((r, i) => r.conds.forEach((c) => {
+      if (c.v !== 'gap') return;
+      const th = threshold(c, s || { speed: e.v * 3.6 });
+      if (Number.isFinite(th) && th > 0 && th < 150) lines.push({ i, th });
+    }));
+    for (const ln of lines) {
+      const y = sy(front + ln.th);
+      if (y < 4) continue;
+      const inside = s && s.gap < ln.th;
+      const col = inside ? C.no : C.line;
+      ctx.fillStyle = rgba(col, 0.13); ctx.fillRect(egoX - LW / 2 + 5, y, LW - 10, sy(front) - y);
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(egoX - LW / 2 + 3, y); ctx.lineTo(egoX + LW / 2 - 3, y); ctx.stroke(); ctx.setLineDash([]);
+      chip('규칙' + (ln.i + 1) + ' ' + Math.round(ln.th) + 'm', egoX, y - 11, col, '#fff', 'center');
+    }
+    // 옆 차선 여유 기준 영역 (규칙에 쓴 기준값)
+    if (s) {
+      const rear = e.y - e.len / 2;
+      const pick = (v) => { for (const r of D.rules) for (const c of r.conds) if (c.v === v) { const th = threshold(c, s); if (Number.isFinite(th)) return { c, th }; } return null; };
+      [['l', -1, s.lg], ['r', 1, s.rg]].forEach(([sd, dir, g]) => {
+        if (!g || !g.valid) return;
+        const lx = laneX(e.lane + dir);
+        const zone = (ok, top, h, txt) => {
+          if (h <= 0) return;
+          const col = ok ? C.ok : C.no;
+          ctx.fillStyle = rgba(col, 0.22); ctx.fillRect(lx - LW / 2 + 5, top, LW - 10, h);
+          ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.strokeRect(lx - LW / 2 + 5, top, LW - 10, h);
+          chip(txt + (ok ? ' ✓' : ' ✗'), lx, Math.min(H - 12, Math.max(12, top + h / 2)), col, '#fff', 'center');
+        };
+        const f = pick(sd + 'f'), b = pick(sd + 'r');
+        if (f && f.th > 0) zone(compare(s[sd + 'f'], f.c.op, f.th), sy(front + f.th), sy(front) - sy(front + f.th), '앞 ' + Math.round(f.th) + 'm');
+        if (b && b.th > 0) zone(compare(s[sd + 'r'], b.c.op, b.th), sy(rear), sy(rear - b.th) - sy(rear), '뒤 ' + Math.round(b.th) + 'm');
+      });
+    }
+    for (const c of w.cars) drawCar(c, false, t);
+    drawCar(e, true, t);
+    // 앞차 표시
+    if (s && s.front) {
+      const f = s.front, fy = sy(f.y), L = f.len * S;
+      const label = '앞차 ' + Math.round(s.gap) + 'm' + (s.ttc < 999 ? ' · ' + s.ttc.toFixed(1) + '초' : '');
+      if (fy + L / 2 > 10) {
+        const hw = Math.round(LW * (f.truck ? 0.56 : 0.5)) / 2 + 5;
+        ctx.strokeStyle = C.line; ctx.lineWidth = 2.5; rr(laneX(f.x) - hw, fy - L / 2 - 4, hw * 2, L + 8, 11); ctx.stroke();
+        chip(label, Math.max(4, laneX(f.x) - hw - 4), fy, '#ffffff', C.ink, 'right');
+      } else chip('▲ ' + label, egoX, 16, '#ffffff', C.ink, 'center');
+    }
+    // 알림
+    if (w.banner && t < w.banner.until) {
+      const col = w.banner.level === 'danger' ? C.no : w.banner.level === 'warn' ? C.warn : C.line;
+      ctx.font = '700 13px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(w.banner.text).width + 30;
+      ctx.fillStyle = col; rr(W / 2 - tw / 2, 54, tw, 30, 15); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(w.banner.text, W / 2, 69.5);
+    }
+    if (!state.running && (t === 0 || w.finished)) {
+      ctx.fillStyle = 'rgba(255,255,255,0.92)'; rr(W / 2 - 150, H / 2 - 46, 300, 92, 16); ctx.fill();
+      ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '700 18px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
+      ctx.fillText(w.finished ? '60초 실험 끝!' : '준비 완료', W / 2, H / 2 - 12);
+      ctx.font = '500 12px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; ctx.fillStyle = '#4a5868';
+      ctx.fillText(w.finished ? '비교표에 추가하고 규칙을 고쳐 다시 달려 보세요' : '▶ 주행 버튼이나 스페이스바를 누르세요', W / 2, H / 2 + 16);
+    }
+  }
+
+  // ---------- 루프 ----------
+  function frame(ts) {
+    const w = state.world;
+    let changed = false;
+    if (state.running && !w.finished) {
+      const real = state.last ? Math.min(0.1, (ts - state.last) / 1000) : 0.016;
+      state.acc += real * state.speed;
+      let n = 0;
+      while (state.acc >= DT && n < 400) {
+        const r = step(w); state.acc -= DT; n++; changed = true;
+        if (w.finished) { state.running = false; state.detailOpen = false; break; }
+        if (r.crashed && state.pauseOnCrash) { state.running = false; state.acc = 0; state.detailOpen = true; $('#incFold').open = true; toast('충돌이 일어나 멈췄어요. 아래 사고 보고서를 확인하세요'); break; }
+      }
+      if (!state.running) { updateTransport(); updateLive(); }
+    }
+    state.last = ts;
+    draw();
+    if (changed && state.running && ts - state.lastUi > 120) { updateLive(); state.lastUi = ts; }
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- 시작 ----------
+  restore();
+  sizeCanvas();
+  try { new ResizeObserver(() => { sizeCanvas(); draw(); }).observe(cv); } catch (e) { window.addEventListener('resize', () => { sizeCanvas(); draw(); }); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => draw());
+  initControls(); initDialog(); initRows();
+  $('#design').addEventListener('input', onDesignInput);
+  $('#design').addEventListener('change', onDesignInput);
+  $('#design').addEventListener('click', onDesignClick);
+  $('#pauseCrash').checked = state.pauseOnCrash;
+  renderDesign(); renderRows();
+  newWorld();
+  requestAnimationFrame(frame);
+})();
+
+</script>
